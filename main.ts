@@ -1,10 +1,10 @@
 // 1. Ensure CELL_SIZE is exported from './config/Constants'
 import { generateTestMap } from './config/MapData';
 import { MapRenderer } from './render/MapRenderer';
-import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, CELL_SIZE } from './config/Constants';
+import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, CELL_SIZE, PLAYER_ID } from './config/Constants';
 import { World } from './ecs/World';
 // 2. Fixed export/import style for MovementSystem (switched to default or named depending on your file structure)
-import { MovementSystem } from './systems/MovementSystem'; 
+import { MovementSystem } from './systems/MovementSystem';
 import { CollisionSystem } from './systems/CollisionSystem';
 import { GLInstancedRenderer } from './render/GLInstancedRenderer';
 import { AssetLoader } from './engine/AssetLoader';
@@ -23,10 +23,10 @@ const mapData: number[] = new Array(MAP_WIDTH_TILES * MAP_HEIGHT_TILES).fill(0);
 async function initEngine() {
   // 1. Setup Canvas & WebGL2 Context
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-if (!canvas) throw new Error('Canvas not found');
+  if (!canvas) throw new Error('Canvas not found');
 
-canvas.width = WORLD_WIDTH;
-canvas.height = WORLD_HEIGHT;
+  canvas.width = WORLD_WIDTH;
+  canvas.height = WORLD_HEIGHT;
 
   // Create a guaranteed non-null reference for TypeScript closures
   const gl = canvas.getContext('webgl2');
@@ -39,12 +39,22 @@ canvas.height = WORLD_HEIGHT;
   ctx.clearColor(0.1, 0.1, 0.12, 1.0);
 
   // 2. Initialize Core Systems & World
-  const world = new World(); 
+  const world = new World();
   const movementSystem = new MovementSystem();
   // CollisionSystem does not require constructor parameters
   const collisionSystem = new CollisionSystem();
   const renderer = new GLInstancedRenderer(ctx, MAX_ENTITIES);
-generateTestMap();
+  generateTestMap();
+
+  // Create player entity
+  const playerId = world.createEntity();
+  world.px[playerId] = 100;
+  world.py[playerId] = 100;
+  world.width[playerId] = 32;
+  world.height[playerId] = 32;
+  world.speed[playerId] = 200;
+  world.health[playerId] = 100;
+  world.deadFlag[playerId] = 0;
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
   const texture = await AssetLoader.loadTexture(
