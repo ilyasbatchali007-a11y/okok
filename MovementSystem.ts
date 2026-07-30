@@ -32,10 +32,10 @@ export class MovementSystem {
     if (w.vx) w.vx[PLAYER_ID] = vx;
     if (w.vy) w.vy[PLAYER_ID] = vy;
 
-    const currentX = w.x ? w.x[PLAYER_ID] : 0;
-    const currentY = w.y ? w.y[PLAYER_ID] : 0;
-    const width = w.w ? w.w[PLAYER_ID] : 32;
-    const height = w.h ? w.h[PLAYER_ID] : 32;
+    const currentX = w.px ? w.px[PLAYER_ID] : 0;
+    const currentY = w.py ? w.py[PLAYER_ID] : 0;
+    const width = w.width ? w.width[PLAYER_ID] : 32;
+    const height = w.height ? w.height[PLAYER_ID] : 32;
 
     const nextPos = (this.collisionSystem as any).moveAndSlide(
       currentX,
@@ -47,7 +47,7 @@ export class MovementSystem {
       dt
     );
 
-    if (w.x) w.x[PLAYER_ID] = nextPos.x;
-    if (w.y) w.y[PLAYER_ID] = nextPos.y;
+    if (w.px) w.px[PLAYER_ID] = nextPos.x;
+    if (w.py) w.py[PLAYER_ID] = nextPos.y;
   }
 }

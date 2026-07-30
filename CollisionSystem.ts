@@ -1,12 +1,12 @@
 type World = {
-  active: boolean[];
-  speed: number[];
-  vx: number[];
-  vy: number[];
-  x: number[];
-  y: number[];
-  w: number[];
-  h: number[];
+  active: Uint8Array;
+  speed: Float32Array;
+  vx: Float32Array;
+  vy: Float32Array;
+  px: Float32Array;
+  py: Float32Array;
+  width: Float32Array;
+  height: Float32Array;
 };
 
 export class CollisionSystem {
@@ -37,17 +37,17 @@ export class CollisionSystem {
 
     // Apply collision and wall-sliding physics
     const nextPos = this.moveAndSlide(
-      world.x[playerId],
-      world.y[playerId],
+      world.px[playerId],
+      world.py[playerId],
       vx,
       vy,
-      world.w[playerId] || 32,
-      world.h[playerId] || 32,
+      world.width[playerId] || 32,
+      world.height[playerId] || 32,
       dt
     );
 
-    world.x[playerId] = nextPos.x;
-    world.y[playerId] = nextPos.y;
+    world.px[playerId] = nextPos.x;
+    world.py[playerId] = nextPos.y;
   }
 
   private moveAndSlide(

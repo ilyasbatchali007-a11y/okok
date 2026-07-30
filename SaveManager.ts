@@ -7,7 +7,13 @@ const BYTES_PER_ENTITY = 29; // 7 Floats (28 bytes) + 1 Uint8 (1 byte)
 export class SaveManager {
   public static saveWorld(world: World): ArrayBuffer {
     const worldAny = world as any;
-    const count = worldAny.set.count;
+    
+    // Count active entities
+    let count = 0;
+    for (let i = 0; i < world.active.length; i++) {
+      if (world.active[i]) count++;
+    }
+    
     const bufferSize = HEADER_SIZE + count * BYTES_PER_ENTITY;
     const buffer = new ArrayBuffer(bufferSize);
 
@@ -17,20 +23,19 @@ export class SaveManager {
     view.setUint32(0, count, true);
 
     let offset = HEADER_SIZE;
-    const { dense } = worldAny.set;
 
     // 2. Write Component Data per Active Entity
-    for (let i = 0; i < count; i++) {
-      const id = dense[i];
+    for (let id = 0; id < world.active.length; id++) {
+      if (!world.active[id]) continue;
 
-      view.setFloat32(offset + 0, worldAny.px[id], true);
-      view.setFloat32(offset + 4, worldAny.py[id], true);
-      view.setFloat32(offset + 8, worldAny.vx[id], true);
-      view.setFloat32(offset + 12, worldAny.vy[id], true);
-      view.setFloat32(offset + 16, worldAny.width[id], true);
-      view.setFloat32(offset + 20, worldAny.height[id], true);
-      view.setFloat32(offset + 24, worldAny.health[id], true);
-      view.setUint8(offset + 28, worldAny.deadFlag[id]);
+      view.setFloat32(offset + 0, world.px[id], true);
+      view.setFloat32(offset + 4, world.py[id], true);
+      view.setFloat32(offset + 8, world.vx[id], true);
+      view.setFloat32(offset + 12, world.vy[id], true);
+      view.setFloat32(offset + 16, world.width[id], true);
+      view.setFloat32(offset + 20, world.height[id], true);
+      view.setFloat32(offset + 24, world.health[id], true);
+      view.setUint8(offset + 28, world.deadFlag[id]);
 
       offset += BYTES_PER_ENTITY;
     }
@@ -43,8 +48,9 @@ export class SaveManager {
     const count = view.getUint32(0, true);
 
     // Clear current active entities
-    const worldAny = world as any;
-    worldAny.set.count = 0;
+    for (let i = 0; i < world.active.length; i++) {
+      world.active[i] = 0;
+    }
 
     let offset = HEADER_SIZE;
 
@@ -58,10 +64,15 @@ export class SaveManager {
       const health = view.getFloat32(offset + 24, true);
       const deadFlag = view.getUint8(offset + 28);
 
-      const id = worldAny.addEntity(px, py, w, h, health);
-      worldAny.vx[id] = vx;
-      worldAny.vy[id] = vy;
-      worldAny.deadFlag[id] = deadFlag;
+      const id = world.createEntity();
+      world.px[id] = px;
+      world.py[id] = py;
+      world.vx[id] = vx;
+      world.vy[id] = vy;
+      world.width[id] = w;
+      world.height[id] = h;
+      world.health[id] = health;
+      world.deadFlag[id] = deadFlag;
 
       offset += BYTES_PER_ENTITY;
     }

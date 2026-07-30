@@ -98,27 +98,28 @@ export class GLInstancedRenderer {
 
     gl.bindVertexArray(null);
   }
-public render(world: World, width: number, height: number, texture: WebGLTexture): void {
+
+  public render(world: World, width: number, height: number, texture: WebGLTexture): void {
     const gl = this.gl;
     const worldAny = world as any;
+
+    // Get entity count from World's active array
+    let count = 0;
+    for (let i = 0; i < world.active.length; i++) {
+      if (world.active[i]) count++;
+    }
     
-    // 💡 SAFE CHECK: Return early if world or world.set is not ready
-    if (!worldAny || !worldAny.set) return;
-    
-    const count = worldAny.set.count;
-    if (!count || count === 0) return;
+    if (count === 0) return;
 
     // Pack entity transform data into contiguous array
-    const dense = worldAny.set.dense;
-    if (!dense) return;
-
     let offset = 0;
-    for (let i = 0; i < count; i++) {
-      const id = dense[i];
-      this.instanceData[offset++] = worldAny.px[id];
-      this.instanceData[offset++] = worldAny.py[id];
-      this.instanceData[offset++] = worldAny.width[id];
-      this.instanceData[offset++] = worldAny.height[id];
+    for (let id = 0; id < world.active.length; id++) {
+      if (world.active[id]) {
+        this.instanceData[offset++] = world.px[id];
+        this.instanceData[offset++] = world.py[id];
+        this.instanceData[offset++] = world.width[id];
+        this.instanceData[offset++] = world.height[id];
+      }
     }
 
     gl.useProgram(this.program);
@@ -165,42 +166,42 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
   }
 
   public renderTiles(
-  tileBuffer: Float32Array, 
-  count: number, 
-  tileSize: number, 
-  width: number, 
-  height: number, 
-  texture: WebGLTexture
-): void {
-  if (count === 0) return;
+    tileBuffer: Float32Array,
+    count: number,
+    tileSize: number,
+    width: number,
+    height: number,
+    texture: WebGLTexture
+  ): void {
+    if (count === 0) return;
 
-  const gl = this.gl;
+    const gl = this.gl;
 
-  // 1. Pack map tile data into standard [x, y, sizeX, sizeY] format
-  let offset = 0;
-  for (let i = 0; i < count; i++) {
-    const tileX = tileBuffer[i * 3 + 0];
-    const tileY = tileBuffer[i * 3 + 1];
-    // tileBuffer[i * 3 + 2] is tileId (used later for texture atlas UVs)
+    // 1. Pack map tile data into standard [x, y, sizeX, sizeY] format
+    let offset = 0;
+    for (let i = 0; i < count; i++) {
+      const tileX = tileBuffer[i * 3 + 0];
+      const tileY = tileBuffer[i * 3 + 1];
+      // tileBuffer[i * 3 + 2] is tileId (used later for texture atlas UVs)
 
-    this.instanceData[offset++] = tileX;
-    this.instanceData[offset++] = tileY;
-    this.instanceData[offset++] = tileSize; // Width
-    this.instanceData[offset++] = tileSize; // Height
+      this.instanceData[offset++] = tileX;
+      this.instanceData[offset++] = tileY;
+      this.instanceData[offset++] = tileSize; // Width
+      this.instanceData[offset++] = tileSize; // Height
+    }
+
+    // 2. Draw using WebGL
+    gl.useProgram(this.program);
+    gl.uniform2f(this.resolutionLoc, width, height);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 4));
+
+    gl.bindVertexArray(this.vao);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+    gl.bindVertexArray(null);
   }
-
-  // 2. Draw using WebGL
-  gl.useProgram(this.program);
-  gl.uniform2f(this.resolutionLoc, width, height);
-
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 4));
-
-  gl.bindVertexArray(this.vao);
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
-  gl.bindVertexArray(null);
-}
 }
