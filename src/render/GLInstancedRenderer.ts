@@ -8,8 +8,8 @@ const SIN_ISO = Math.sin(ISO_ANGLE);
 
 // Vertex Shader Source with unified isometric transformation
 const VS_SOURCE = `#version 300 es
-layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
-layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
+layout(location = 0) in vec2 a_quadPos; // Quad vertex position [-0.5..0.5]
+layout(location = 1) in vec2 a_pos;     // Entity position (px, py) - center of instance
 layout(location = 2) in vec2 a_size;    // Entity size (width, height)
 
 uniform mat4 u_projection;   // Orthographic projection matrix
@@ -20,6 +20,7 @@ out vec2 v_uv;
 
 void main() {
   // Calculate world position from instance data
+  // Position the quad centered at a_pos, with dimensions a_size
   vec2 worldPos = a_pos + (a_quadPos * a_size);
   
   // Apply isometric transformation in the shader (unified approach)
@@ -30,10 +31,10 @@ void main() {
   vec2 screenPos = isoPos.xy - u_cameraOffset;
   
   // Apply orthographic projection to convert to clip space
-  vec4 projected = u_projection * vec4(screenPos, 0.0, 1.0);
+  gl_Position = u_projection * vec4(screenPos, 0.0, 1.0);
   
-  gl_Position = projected;
-  v_uv = a_quadPos;
+  // Convert quadPos from [-0.5, 0.5] to [0, 1] for UV mapping
+  v_uv = a_quadPos + 0.5;
 }
 `;
 
@@ -81,12 +82,13 @@ export class GLInstancedRenderer {
     this.vao = vao;
     gl.bindVertexArray(this.vao);
 
-    // 1. Static Quad Vertex Buffer (4 vertices for a unit square)
+    // 1. Static Quad Vertex Buffer (4 vertices for a unit square in clip space)
+    // Using positions that form a proper quad covering the full tile
     const quadVertices = new Float32Array([
-      0, 0,  // Bottom-left
-      1, 0,  // Bottom-right
-      1, 1,  // Top-right
-      0, 1,  // Top-left
+      -0.5, -0.5,  // Bottom-left
+       0.5, -0.5,  // Bottom-right
+       0.5,  0.5,  // Top-right
+      -0.5,  0.5,  // Top-left
     ]);
     const quadBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -95,10 +97,10 @@ export class GLInstancedRenderer {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-    // 2. Index Buffer (6 indices for 2 triangles forming a quad)
+    // 2. Index Buffer (6 indices for 2 triangles forming a complete quad)
     const quadIndices = new Uint16Array([
-      0, 1, 2,  // First triangle
-      0, 2, 3,  // Second triangle
+      0, 1, 2,  // First triangle (bottom-left, bottom-right, top-right)
+      0, 2, 3,  // Second triangle (bottom-left, top-right, top-left)
     ]);
     const idxBuffer = gl.createBuffer();
     if (!idxBuffer) throw new Error('Failed to create index buffer');
@@ -114,12 +116,12 @@ export class GLInstancedRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.instanceData.byteLength, gl.DYNAMIC_DRAW);
 
-    // Attribute 1: Position (px, py)
+    // Attribute 1: Position (px, py) - instance data
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 0);
     gl.vertexAttribDivisor(1, 1);
 
-    // Attribute 2: Size (width, height)
+    // Attribute 2: Size (width, height) - instance data
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 16, 8);
     gl.vertexAttribDivisor(2, 1);
@@ -149,6 +151,7 @@ export class GLInstancedRenderer {
     const sy = 2 / (top - bottom);
     const sz = -2 / (far - near);
 
+    // Column-major order for WebGL
     return new Float32Array([
       sx, 0, 0, 0,
       0, sy, 0, 0,
@@ -168,16 +171,21 @@ export class GLInstancedRenderer {
     const sin45 = Math.SQRT1_2;
     
     // Combined rotation + scale matrix for isometric view
-    // [ cos45  -sin45   0   0 ]
-    // [ sin45   cos45   0   0 ] * scale(1, 0.5)
-    // [ 0       0       1   0 ]
-    // [ 0       0       0   1 ]
+    // Matrix transforms world (x,y) to isometric screen space:
+    // x_iso = x * cos45 - y * sin45
+    // y_iso = (x * sin45 + y * cos45) * 0.5
+    // 
+    // Column-major order for WebGL:
+    // [ cos45   sin45*0.5  0  0 ]
+    // [ -sin45  cos45*0.5  0  0 ]
+    // [ 0       0          1  0 ]
+    // [ 0       0          0  1 ]
     
     return new Float32Array([
-      cos45, sin45 * 0.5, 0, 0,   // Column 0: X basis (scaled Y component by 0.5)
-      -sin45, cos45 * 0.5, 0, 0,  // Column 1: Y basis (scaled Y component by 0.5)
-      0, 0, 1, 0,                  // Column 2: Z basis
-      0, 0, 0, 1                   // Column 3: Translation
+      cos45, -sin45, 0, 0,           // Column 0: X basis vector
+      sin45 * 0.5, cos45 * 0.5, 0, 0, // Column 1: Y basis vector (scaled by 0.5)
+      0, 0, 1, 0,                     // Column 2: Z basis
+      0, 0, 0, 1                      // Column 3: Translation
     ]);
   }
 
@@ -221,10 +229,10 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     let offset = 0;
     for (let i = 0; i < count; i++) {
       const id = dense[i];
-      this.instanceData[offset++] = worldAny.px[id];
-      this.instanceData[offset++] = worldAny.py[id];
-      this.instanceData[offset++] = worldAny.width[id];
-      this.instanceData[offset++] = worldAny.height[id];
+      this.instanceData[offset++] = worldAny.x[id];
+      this.instanceData[offset++] = worldAny.y[id];
+      this.instanceData[offset++] = worldAny.w[id];
+      this.instanceData[offset++] = worldAny.h[id];
     }
 
     gl.useProgram(this.program);
