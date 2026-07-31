@@ -12,9 +12,9 @@ layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
 layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
 layout(location = 2) in vec2 a_size;    // Entity size (width, height)
 
-uniform vec2 u_resolution;
-uniform mat4 u_isoMatrix;      // Isometric transformation matrix
-uniform vec2 u_cameraOffset;   // Camera scroll offset
+uniform mat4 u_projection;   // Orthographic projection matrix
+uniform mat4 u_isoMatrix;    // Isometric transformation matrix
+uniform vec2 u_cameraOffset; // Camera scroll offset
 
 out vec2 v_uv;
 
@@ -29,13 +29,10 @@ void main() {
   // Apply camera offset
   vec2 screenPos = isoPos.xy - u_cameraOffset;
   
-  // Convert screen coordinates [0, res] to WebGL clip space [-1, 1]
-  vec2 zeroToOne = screenPos / u_resolution;
-  vec2 zeroToTwo = zeroToOne * 2.0;
-  vec2 clipSpace = zeroToTwo - 1.0;
-
-  // Flip Y axis so 0,0 is top-left
-  gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);
+  // Apply orthographic projection to convert to clip space
+  vec4 projected = u_projection * vec4(screenPos, 0.0, 1.0);
+  
+  gl_Position = projected;
   v_uv = a_quadPos;
 }
 `;
@@ -58,9 +55,10 @@ export class GLInstancedRenderer {
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject;
   private instanceBuffer: WebGLBuffer;
+  private indexBuffer: WebGLBuffer;
 
   private instanceData: Float32Array;
-  private resolutionLoc: WebGLUniformLocation | null;
+  private projectionLoc: WebGLUniformLocation | null;
   private isoMatrixLoc: WebGLUniformLocation | null;
   private cameraOffsetLoc: WebGLUniformLocation | null;
 
@@ -73,7 +71,7 @@ export class GLInstancedRenderer {
     const fs = this.createShader(gl.FRAGMENT_SHADER, FS_SOURCE);
     this.program = this.createProgram(vs, fs);
 
-    this.resolutionLoc = gl.getUniformLocation(this.program, 'u_resolution');
+    this.projectionLoc = gl.getUniformLocation(this.program, 'u_projection');
     this.isoMatrixLoc = gl.getUniformLocation(this.program, 'u_isoMatrix');
     this.cameraOffsetLoc = gl.getUniformLocation(this.program, 'u_cameraOffset');
 
@@ -83,14 +81,12 @@ export class GLInstancedRenderer {
     this.vao = vao;
     gl.bindVertexArray(this.vao);
 
-    // 1. Static Quad Buffer (unit rectangle)
+    // 1. Static Quad Vertex Buffer (4 vertices for a unit square)
     const quadVertices = new Float32Array([
-      0, 0,
-      1, 0,
-      0, 1,
-      0, 1,
-      1, 0,
-      1, 1,
+      0, 0,  // Bottom-left
+      1, 0,  // Bottom-right
+      1, 1,  // Top-right
+      0, 1,  // Top-left
     ]);
     const quadBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -99,7 +95,18 @@ export class GLInstancedRenderer {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-    // 2. Dynamic Instance Buffer (pos & size)
+    // 2. Index Buffer (6 indices for 2 triangles forming a quad)
+    const quadIndices = new Uint16Array([
+      0, 1, 2,  // First triangle
+      0, 2, 3,  // Second triangle
+    ]);
+    const idxBuffer = gl.createBuffer();
+    if (!idxBuffer) throw new Error('Failed to create index buffer');
+    this.indexBuffer = idxBuffer;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
+
+    // 3. Dynamic Instance Buffer (pos & size)
     const instBuffer = gl.createBuffer();
     if (!instBuffer) throw new Error('Failed to create instance buffer');
     this.instanceBuffer = instBuffer;
@@ -118,6 +125,36 @@ export class GLInstancedRenderer {
     gl.vertexAttribDivisor(2, 1);
 
     gl.bindVertexArray(null);
+  }
+
+  /**
+   * Build orthographic projection matrix for shader uniform
+   * Converts screen/isometric space to WebGL clip space [-1, 1]
+   */
+  private buildProjectionMatrix(width: number, height: number): Float32Array {
+    // Orthographic projection matrix that maps [0, width] x [0, height] to [-1, 1] x [-1, 1]
+    // With Y flipped so (0,0) is top-left in screen space
+    const left = 0;
+    const right = width;
+    const bottom = height;
+    const top = 0;
+    const near = -1;
+    const far = 1;
+
+    const tx = -(right + left) / (right - left);
+    const ty = -(top + bottom) / (top - bottom);
+    const tz = -(far + near) / (far - near);
+
+    const sx = 2 / (right - left);
+    const sy = 2 / (top - bottom);
+    const sz = -2 / (far - near);
+
+    return new Float32Array([
+      sx, 0, 0, 0,
+      0, sy, 0, 0,
+      0, 0, sz, 0,
+      tx, ty, tz, 1
+    ]);
   }
 
   /**
@@ -147,8 +184,14 @@ export class GLInstancedRenderer {
   /**
    * Set isometric transformation and camera uniforms for all render calls
    */
-  private setIsoUniforms(cameraX: number, cameraY: number): void {
+  private setIsoUniforms(width: number, height: number, cameraX: number, cameraY: number): void {
     const gl = this.gl;
+    
+    // Apply orthographic projection matrix
+    const projMatrix = this.buildProjectionMatrix(width, height);
+    if (this.projectionLoc) {
+      gl.uniformMatrix4fv(this.projectionLoc, false, projMatrix);
+    }
     
     // Apply unified isometric matrix
     const isoMatrix = this.buildIsometricMatrix();
@@ -185,10 +228,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     }
 
     gl.useProgram(this.program);
-    gl.uniform2f(this.resolutionLoc, width, height);
 
-    // Apply unified isometric transformation to ALL entities
-    this.setIsoUniforms(0, 0); // Camera offset can be passed from main loop
+    // Apply unified isometric transformation with projection matrix to ALL entities
+    this.setIsoUniforms(width, height, 0, 0); // Camera offset can be passed from main loop
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -197,7 +239,7 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 4));
 
     gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+    gl.drawElementsInstanced(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, count);
     gl.bindVertexArray(null);
   }
 
@@ -248,10 +290,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
 
     // Draw single quad for the entire floor with isometric transform
     gl.useProgram(this.program);
-    gl.uniform2f(this.resolutionLoc, width, height);
 
     // Apply unified isometric transformation to floor (same as entities)
-    this.setIsoUniforms(cameraX, cameraY);
+    this.setIsoUniforms(width, height, cameraX, cameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -260,7 +301,7 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
 
     gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1); // Draw 1 instance (the floor)
+    gl.drawElementsInstanced(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, 1); // Draw 1 instance (the floor)
     gl.bindVertexArray(null);
   }
 
@@ -293,10 +334,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
 
   // 2. Draw using WebGL with unified isometric transformation
   gl.useProgram(this.program);
-  gl.uniform2f(this.resolutionLoc, width, height);
 
   // Apply unified isometric transformation to tiles (same as floor and entities)
-  this.setIsoUniforms(cameraX, cameraY);
+  this.setIsoUniforms(width, height, cameraX, cameraY);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -305,7 +345,7 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 4));
 
   gl.bindVertexArray(this.vao);
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+  gl.drawElementsInstanced(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, count);
   gl.bindVertexArray(null);
 }
 }
