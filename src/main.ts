@@ -97,7 +97,7 @@ canvas.height = WORLD_HEIGHT;
     );
 
     // 3. Draw Entities on Top with same isometric transform
-    renderer.render(world, WORLD_WIDTH, WORLD_HEIGHT, texture);
+    renderer.render(world, WORLD_WIDTH, WORLD_HEIGHT, texture, cameraX, cameraY);
 
     requestAnimationFrame(loop);
   }

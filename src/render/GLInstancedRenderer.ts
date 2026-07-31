@@ -12,10 +12,7 @@ layout(location = 0) in vec2 a_quadPos; // Quad vertex position [-0.5..0.5]
 layout(location = 1) in vec2 a_pos;     // Entity position (px, py) - center of instance
 layout(location = 2) in vec2 a_size;    // Entity size (width, height)
 
-uniform mat4 u_projection;   // Orthographic projection matrix
-uniform mat4 u_isoMatrix;    // Isometric transformation matrix
-uniform vec2 u_cameraOffset; // Camera scroll offset
-
+uniform mat4 u_mvpMatrix;  // Combined Model-View-Projection matrix with isometric transform
 out vec2 v_uv;
 
 void main() {
@@ -23,15 +20,8 @@ void main() {
   // Position the quad centered at a_pos, with dimensions a_size
   vec2 worldPos = a_pos + (a_quadPos * a_size);
   
-  // Apply isometric transformation in the shader (unified approach)
-  // This transforms Cartesian coordinates to isometric view
-  vec4 isoPos = u_isoMatrix * vec4(worldPos, 0.0, 1.0);
-  
-  // Apply camera offset
-  vec2 screenPos = isoPos.xy - u_cameraOffset;
-  
-  // Apply orthographic projection to convert to clip space
-  gl_Position = u_projection * vec4(screenPos, 0.0, 1.0);
+  // Apply combined MVP matrix (includes isometric rotation/scale and projection)
+  gl_Position = u_mvpMatrix * vec4(worldPos, 0.0, 1.0);
   
   // Convert quadPos from [-0.5, 0.5] to [0, 1] for UV mapping
   v_uv = a_quadPos + 0.5;
@@ -59,9 +49,7 @@ export class GLInstancedRenderer {
   private indexBuffer: WebGLBuffer;
 
   private instanceData: Float32Array;
-  private projectionLoc: WebGLUniformLocation | null;
-  private isoMatrixLoc: WebGLUniformLocation | null;
-  private cameraOffsetLoc: WebGLUniformLocation | null;
+  private mvpMatrixLoc: WebGLUniformLocation | null;
 
   constructor(gl: WebGL2RenderingContext, maxEntities: number) {
     this.gl = gl;
@@ -72,9 +60,7 @@ export class GLInstancedRenderer {
     const fs = this.createShader(gl.FRAGMENT_SHADER, FS_SOURCE);
     this.program = this.createProgram(vs, fs);
 
-    this.projectionLoc = gl.getUniformLocation(this.program, 'u_projection');
-    this.isoMatrixLoc = gl.getUniformLocation(this.program, 'u_isoMatrix');
-    this.cameraOffsetLoc = gl.getUniformLocation(this.program, 'u_cameraOffset');
+    this.mvpMatrixLoc = gl.getUniformLocation(this.program, 'u_mvpMatrix');
 
     // Create & setup VAO
     const vao = gl.createVertexArray();
@@ -151,12 +137,23 @@ export class GLInstancedRenderer {
     const sy = 2 / (top - bottom);
     const sz = -2 / (far - near);
 
-    // Column-major order for WebGL
+    // Column-major order for WebGL - store columns sequentially
+    // Matrix layout (row-major notation):
+    // [ sx  0   0   0 ]
+    // [ 0   sy  0   0 ]
+    // [ 0   0   sz  0 ]
+    // [ tx  ty  tz  1 ]
+    // 
+    // In column-major storage (what WebGL expects):
+    // Column 0: [sx, 0, 0, tx]
+    // Column 1: [0, sy, 0, ty]
+    // Column 2: [0, 0, sz, tz]
+    // Column 3: [0, 0, 0, 1]
     return new Float32Array([
-      sx, 0, 0, 0,
-      0, sy, 0, 0,
-      0, 0, sz, 0,
-      tx, ty, tz, 1
+      sx, 0, 0, tx,        // Column 0
+      0, sy, 0, ty,        // Column 1
+      0, 0, sz, tz,        // Column 2
+      0, 0, 0, 1           // Column 3
     ]);
   }
 
@@ -171,48 +168,88 @@ export class GLInstancedRenderer {
     const sin45 = Math.SQRT1_2;
     
     // Combined rotation + scale matrix for isometric view
-    // Matrix transforms world (x,y) to isometric screen space:
-    // x_iso = x * cos45 - y * sin45
-    // y_iso = (x * sin45 + y * cos45) * 0.5
+    // In row-major notation, the matrix looks like:
+    // [ cos45   -sin45   0   0 ]
+    // [ sin45*0.5  cos45*0.5  0   0 ]
+    // [ 0        0           1   0 ]
+    // [ 0        0           0   1 ]
     // 
-    // Column-major order for WebGL:
-    // [ cos45   sin45*0.5  0  0 ]
-    // [ -sin45  cos45*0.5  0  0 ]
-    // [ 0       0          1  0 ]
-    // [ 0       0          0  1 ]
+    // WebGL expects column-major order, so we store columns sequentially:
+    // Column 0: [cos45, sin45*0.5, 0, 0]
+    // Column 1: [-sin45, cos45*0.5, 0, 0]
+    // Column 2: [0, 0, 1, 0]
+    // Column 3: [0, 0, 0, 1]
     
     return new Float32Array([
-      cos45, -sin45, 0, 0,           // Column 0: X basis vector
-      sin45 * 0.5, cos45 * 0.5, 0, 0, // Column 1: Y basis vector (scaled by 0.5)
-      0, 0, 1, 0,                     // Column 2: Z basis
-      0, 0, 0, 1                      // Column 3: Translation
+      cos45, sin45 * 0.5, 0, 0,                // Column 0
+      -sin45, cos45 * 0.5, 0, 0,               // Column 1
+      0, 0, 1, 0,                              // Column 2
+      0, 0, 0, 1                               // Column 3
+    ]);
+  }
+
+  /**
+   * Build combined view-isometric-projection matrix
+   * Combines camera offset, isometric transform, and projection into one matrix
+   */
+  private buildViewIsoProjectionMatrix(width: number, height: number, cameraX: number, cameraY: number): Float32Array {
+    const cos45 = Math.SQRT1_2;
+    const sin45 = Math.SQRT1_2;
+    
+    // Orthographic projection parameters
+    const left = 0;
+    const right = width;
+    const bottom = height;
+    const top = 0;
+    
+    const tx = -(right + left) / (right - left);
+    const ty = -(top + bottom) / (top - bottom);
+    const sx = 2 / (right - left);
+    const sy = 2 / (top - bottom);
+    
+    // Combined matrix: Projection * Isometric * View
+    // First apply camera offset (view), then isometric rotation+scale, then projection
+    
+    // Row-major conceptual layout after combining all transforms:
+    // The isometric transform rotates 45° and scales Y by 0.5
+    // x_iso = (x - camX) * cos45 - (y - camY) * sin45
+    // y_iso = ((x - camX) * sin45 + (y - camY) * cos45) * 0.5
+    // Then project: x_clip = x_iso * sx + tx, y_clip = y_iso * sy + ty
+    
+    // After expanding and collecting terms for column-major storage:
+    // Column 0: [cos45*sx, sin45*0.5*sy, 0, 0]
+    // Column 1: [-sin45*sx, cos45*0.5*sy, 0, 0]
+    // Column 2: [0, 0, 1, 0]
+    // Column 3: [tx - (cameraX*cos45 - cameraY*sin45)*sx, ty - (cameraX*sin45 + cameraY*cos45)*0.5*sy, 0, 1]
+    
+    const isoCamX = cameraX * cos45 - cameraY * sin45;
+    const isoCamY = (cameraX * sin45 + cameraY * cos45) * 0.5;
+    
+    return new Float32Array([
+      cos45 * sx, sin45 * 0.5 * sy, 0, 0,                      // Column 0
+      -sin45 * sx, cos45 * 0.5 * sy, 0, 0,                     // Column 1
+      0, 0, 1, 0,                                               // Column 2
+      tx - isoCamX * sx, ty - isoCamY * sy, 0, 1               // Column 3
     ]);
   }
 
   /**
    * Set isometric transformation and camera uniforms for all render calls
    */
-  private setIsoUniforms(width: number, height: number, cameraX: number, cameraY: number): void {
+  /**
+   * Set unified MVP matrix for isometric rendering
+   */
+  private setMVPMatrix(width: number, height: number, cameraX: number, cameraY: number): void {
     const gl = this.gl;
     
-    // Apply orthographic projection matrix
-    const projMatrix = this.buildProjectionMatrix(width, height);
-    if (this.projectionLoc) {
-      gl.uniformMatrix4fv(this.projectionLoc, false, projMatrix);
-    }
-    
-    // Apply unified isometric matrix
-    const isoMatrix = this.buildIsometricMatrix();
-    if (this.isoMatrixLoc) {
-      gl.uniformMatrix4fv(this.isoMatrixLoc, false, isoMatrix);
-    }
-    
-    // Apply camera offset in isometric space
-    if (this.cameraOffsetLoc) {
-      gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    // Apply combined view-isometric-projection matrix
+    const mvpMatrix = this.buildViewIsoProjectionMatrix(width, height, cameraX, cameraY);
+    if (this.mvpMatrixLoc) {
+      gl.uniformMatrix4fv(this.mvpMatrixLoc, false, mvpMatrix);
     }
   }
-public render(world: World, width: number, height: number, texture: WebGLTexture): void {
+  
+public render(world: World, width: number, height: number, texture: WebGLTexture, cameraX: number = 0, cameraY: number = 0): void {
     const gl = this.gl;
     const worldAny = world as any;
     
@@ -238,7 +275,7 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     gl.useProgram(this.program);
 
     // Apply unified isometric transformation with projection matrix to ALL entities
-    this.setIsoUniforms(width, height, 0, 0); // Camera offset can be passed from main loop
+    this.setMVPMatrix(width, height, cameraX, cameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -300,7 +337,7 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     gl.useProgram(this.program);
 
     // Apply unified isometric transformation to floor (same as entities)
-    this.setIsoUniforms(width, height, cameraX, cameraY);
+    this.setMVPMatrix(width, height, cameraX, cameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -344,7 +381,7 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
   gl.useProgram(this.program);
 
   // Apply unified isometric transformation to tiles (same as floor and entities)
-  this.setIsoUniforms(width, height, cameraX, cameraY);
+  this.setMVPMatrix(width, height, cameraX, cameraY);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
