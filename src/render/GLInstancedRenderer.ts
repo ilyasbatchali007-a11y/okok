@@ -1,38 +1,72 @@
 import { World } from '../ecs/World';
+import { PLAYER_ID } from '../config/Constants';
 
-// Vertex Shader Source
+// Vertex Shader Source - simplified isometric transformation
 const VS_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
 layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
 layout(location = 2) in vec2 a_size;    // Entity size (width, height)
 
 uniform vec2 u_resolution;
+uniform float u_isoAngle;               // Isometric rotation angle
+uniform float u_isoScale;               // Y scale for isometric projection (typically 0.5)
+uniform vec2 u_cameraOffset;            // Camera offset for scrolling
 
 out vec2 v_uv;
 
 void main() {
+  // Calculate world position from instance data
   vec2 worldPos = a_pos + (a_quadPos * a_size);
-  // Convert screen coordinates [0, res] to WebGL clip space [-1, 1]
-  vec2 zeroToOne = worldPos / u_resolution;
+  
+  // Apply camera offset to get screen-relative position
+  vec2 screenPos = worldPos - u_cameraOffset;
+  
+  // Center on screen
+  vec2 centeredPos = screenPos - (u_resolution * 0.5);
+  
+  // Apply isometric transformation: rotate 45° and scale Y by 0.5
+  float c = cos(u_isoAngle);
+  float s = sin(u_isoAngle);
+  vec2 isoPos;
+  isoPos.x = centeredPos.x * c - centeredPos.y * s;
+  isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
+  
+  // Convert to WebGL clip space [-1, 1]
+  vec2 zeroToOne = isoPos / (u_resolution * 0.5);
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
-
-  // Flip Y axis so 0,0 is top-left
+  
   gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);
   v_uv = a_quadPos;
 }
 `;
 
-// Fragment Shader Source
+// Fragment Shader Source - supports both floor and entity colors
 const FS_SOURCE = `#version 300 es
 precision mediump float;
 
 in vec2 v_uv;
 uniform sampler2D u_texture;
+uniform int u_renderMode;  // 0 = floor, 1 = entity
+uniform vec4 u_entityColor;
 out vec4 fragColor;
 
 void main() {
-  fragColor = texture(u_texture, v_uv);
+  if (u_renderMode == 1) {
+    // Render as solid red entity
+    fragColor = u_entityColor;
+  } else {
+    // Render as green checkered floor pattern
+    float gridX = mod(floor(v_uv.x * 8.0), 2.0);
+    float gridY = mod(floor(v_uv.y * 8.0), 2.0);
+    float checker = mod(gridX + gridY, 2.0);
+    
+    if (checker < 0.5) {
+      fragColor = vec4(0.2, 0.6, 0.2, 1.0);  // Dark green
+    } else {
+      fragColor = vec4(0.3, 0.7, 0.3, 1.0);  // Light green
+    }
+  }
 }
 `;
 
@@ -44,6 +78,17 @@ export class GLInstancedRenderer {
 
   private instanceData: Float32Array;
   private resolutionLoc: WebGLUniformLocation | null;
+  private isoAngleLoc: WebGLUniformLocation | null;
+  private isoScaleLoc: WebGLUniformLocation | null;
+  private cameraOffsetLoc: WebGLUniformLocation | null;
+  private renderModeLoc: WebGLUniformLocation | null;
+  private entityColorLoc: WebGLUniformLocation | null;
+  
+  // Isometric view defaults
+  private isoAngle: number = Math.PI / 4;  // 45 degrees
+  private isoScale: number = 0.5;          // Y compression for isometric
+  private cameraOffsetX: number = 0;
+  private cameraOffsetY: number = 0;
 
   constructor(gl: WebGL2RenderingContext, maxEntities: number) {
     this.gl = gl;
@@ -55,6 +100,11 @@ export class GLInstancedRenderer {
     this.program = this.createProgram(vs, fs);
 
     this.resolutionLoc = gl.getUniformLocation(this.program, 'u_resolution');
+    this.isoAngleLoc = gl.getUniformLocation(this.program, 'u_isoAngle');
+    this.isoScaleLoc = gl.getUniformLocation(this.program, 'u_isoScale');
+    this.cameraOffsetLoc = gl.getUniformLocation(this.program, 'u_cameraOffset');
+    this.renderModeLoc = gl.getUniformLocation(this.program, 'u_renderMode');
+    this.entityColorLoc = gl.getUniformLocation(this.program, 'u_entityColor');
 
     // Create & setup VAO
     const vao = gl.createVertexArray();
@@ -98,11 +148,20 @@ export class GLInstancedRenderer {
 
     gl.bindVertexArray(null);
   }
-public render(world: World, width: number, height: number, texture: WebGLTexture): void {
+  
+  /**
+   * Set isometric view parameters
+   */
+  public setIsometricView(angleRadians: number, scaleY: number): void {
+    this.isoAngle = angleRadians;
+    this.isoScale = scaleY;
+  }
+  public render(world: World, width: number, height: number, texture: WebGLTexture, 
+                cameraX: number = 0, cameraY: number = 0): void {
     const gl = this.gl;
     const worldAny = world as any;
     
-    // 💡 SAFE CHECK: Return early if world or world.set is not ready
+    // SAFE CHECK: Return early if world or world.set is not ready
     if (!worldAny || !worldAny.set) return;
     
     const count = worldAny.set.count;
@@ -123,6 +182,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
 
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
+    gl.uniform1f(this.isoAngleLoc, this.isoAngle);
+    gl.uniform1f(this.isoScaleLoc, this.isoScale);
+    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -132,6 +194,41 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
 
     gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+    gl.bindVertexArray(null);
+  }
+  
+  /**
+   * Render player entity with red color
+   */
+  public renderPlayer(world: World, width: number, height: number, texture: WebGLTexture,
+                      cameraX: number = 0, cameraY: number = 0): void {
+    const gl = this.gl;
+    const worldAny = world as any;
+    
+    if (!worldAny || !worldAny.active || !worldAny.active[PLAYER_ID]) return;
+    
+    // Pack single player entity
+    this.instanceData[0] = worldAny.px[PLAYER_ID];
+    this.instanceData[1] = worldAny.py[PLAYER_ID];
+    this.instanceData[2] = worldAny.width[PLAYER_ID];
+    this.instanceData[3] = worldAny.height[PLAYER_ID];
+
+    gl.useProgram(this.program);
+    gl.uniform2f(this.resolutionLoc, width, height);
+    gl.uniform1f(this.isoAngleLoc, this.isoAngle);
+    gl.uniform1f(this.isoScaleLoc, this.isoScale);
+    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform1i(this.renderModeLoc, 1);  // Entity mode
+    gl.uniform4f(this.entityColorLoc, 1.0, 0.0, 0.0, 1.0);  // Red color
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+
+    gl.bindVertexArray(this.vao);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1);
     gl.bindVertexArray(null);
   }
 
@@ -168,7 +265,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     floorData: { x: number; y: number; width: number; height: number },
     width: number,
     height: number,
-    texture: WebGLTexture
+    texture: WebGLTexture,
+    cameraX: number = 0,
+    cameraY: number = 0
   ): void {
     const gl = this.gl;
 
@@ -181,6 +280,10 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     // Draw single quad for the entire floor
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
+    gl.uniform1f(this.isoAngleLoc, this.isoAngle);
+    gl.uniform1f(this.isoScaleLoc, this.isoScale);
+    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform1i(this.renderModeLoc, 0);  // Floor mode
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -192,44 +295,4 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1); // Draw 1 instance (the floor)
     gl.bindVertexArray(null);
   }
-
-  public renderTiles(
-  tileBuffer: Float32Array, 
-  count: number, 
-  tileSize: number, 
-  width: number, 
-  height: number, 
-  texture: WebGLTexture
-): void {
-  if (count === 0) return;
-
-  const gl = this.gl;
-
-  // 1. Pack map tile data into standard [x, y, sizeX, sizeY] format
-  let offset = 0;
-  for (let i = 0; i < count; i++) {
-    const tileX = tileBuffer[i * 3 + 0];
-    const tileY = tileBuffer[i * 3 + 1];
-    // tileBuffer[i * 3 + 2] is tileId (used later for texture atlas UVs)
-
-    this.instanceData[offset++] = tileX;
-    this.instanceData[offset++] = tileY;
-    this.instanceData[offset++] = tileSize; // Width
-    this.instanceData[offset++] = tileSize; // Height
-  }
-
-  // 2. Draw using WebGL
-  gl.useProgram(this.program);
-  gl.uniform2f(this.resolutionLoc, width, height);
-
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 4));
-
-  gl.bindVertexArray(this.vao);
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
-  gl.bindVertexArray(null);
-}
 }
