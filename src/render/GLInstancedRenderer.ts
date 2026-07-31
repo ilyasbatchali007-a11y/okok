@@ -192,44 +192,4 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1); // Draw 1 instance (the floor)
     gl.bindVertexArray(null);
   }
-
-  public renderTiles(
-  tileBuffer: Float32Array, 
-  count: number, 
-  tileSize: number, 
-  width: number, 
-  height: number, 
-  texture: WebGLTexture
-): void {
-  if (count === 0) return;
-
-  const gl = this.gl;
-
-  // 1. Pack map tile data into standard [x, y, sizeX, sizeY] format
-  let offset = 0;
-  for (let i = 0; i < count; i++) {
-    const tileX = tileBuffer[i * 3 + 0];
-    const tileY = tileBuffer[i * 3 + 1];
-    // tileBuffer[i * 3 + 2] is tileId (used later for texture atlas UVs)
-
-    this.instanceData[offset++] = tileX;
-    this.instanceData[offset++] = tileY;
-    this.instanceData[offset++] = tileSize; // Width
-    this.instanceData[offset++] = tileSize; // Height
-  }
-
-  // 2. Draw using WebGL
-  gl.useProgram(this.program);
-  gl.uniform2f(this.resolutionLoc, width, height);
-
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-  gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 4));
-
-  gl.bindVertexArray(this.vao);
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
-  gl.bindVertexArray(null);
-}
 }
