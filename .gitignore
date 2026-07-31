@@ -1,57 +1,49 @@
 ```
-# Dependencies
-node_modules/
-
-# Build artifacts
-dist/
-build/
-*.o
-*.obj
+# Compiled and build artifacts
 *.pyc
 __pycache__/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.class
+*.out
 
-# Logs
-*.log
-
-# Environment
+# Dependencies
+node_modules/
+venv/
+.venv/
 .env
 .env.local
 *.env.*
+
+# Build directories
+dist/
+build/
+target/
+.gradle/
+
+# Python caches
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
 
 # Editors
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
 
-# OS
+# System files
 .DS_Store
 Thumbs.db
 
-# Coverage
-coverage/
-htmlcov/
-*.coverage
-
-# TypeScript/JavaScript specific
-*.js.map
-*.ts.map
-*.tsx.map
-
-# Package lock files
-package-lock.json
-
-# Compiled libraries
-*.node
-*.so
-*.dll
-*.exe
-*.a
-*.dylib
-*.jar
-*.war
-*.class
+# Logs and temp files
+*.log
+*.tmp
 
 # Compressed files
 *.zip
@@ -76,22 +68,4 @@ package-lock.json
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-
-# MyPy cache
-.mypy_cache/
-
-# Pytest cache
-.pytest_cache/
-
-# Gradle
-.gradle/
-
-# Target directory (for Rust, Java, etc.)
-target/
-
-# Julia packages
-julia-*/
-
-# Zig build directory
-zig-out/
 ```
