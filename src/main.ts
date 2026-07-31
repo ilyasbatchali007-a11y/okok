@@ -1,7 +1,7 @@
 // 1. Ensure CELL_SIZE is exported from './config/Constants'
 import { generateTestMap } from './config/MapData';
 import { MapRenderer } from './render/MapRenderer';
-import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, CELL_SIZE } from './config/Constants';
+import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, CELL_SIZE, PLAYER_ID } from './config/Constants';
 import { World } from './ecs/World';
 // 2. Fixed export/import style for MovementSystem (switched to default or named depending on your file structure)
 import { MovementSystem } from './systems/MovementSystem'; 
@@ -9,6 +9,7 @@ import { CollisionSystem } from './systems/CollisionSystem';
 import { GLInstancedRenderer } from './render/GLInstancedRenderer';
 import { AssetLoader } from './engine/AssetLoader';
 import { SaveManager } from './serialization/SaveManager';
+import { Camera, createPlayerCamera } from './engine/Camera';
 // 💡 ADDITION: Initialize MapRenderer
 const mapRenderer = new MapRenderer();
 
@@ -17,8 +18,9 @@ async function initEngine() {
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 if (!canvas) throw new Error('Canvas not found');
 
-canvas.width = WORLD_WIDTH;
-canvas.height = WORLD_HEIGHT;
+// Set canvas to window size for proper viewport
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
   // Create a guaranteed non-null reference for TypeScript closures
   const gl = canvas.getContext('webgl2');
@@ -36,7 +38,30 @@ canvas.height = WORLD_HEIGHT;
   // CollisionSystem does not require constructor parameters
   const collisionSystem = new CollisionSystem();
   const renderer = new GLInstancedRenderer(ctx, MAX_ENTITIES);
-generateTestMap();
+  generateTestMap();
+  
+  // Spawn player entity at center of map
+  const playerX = WORLD_WIDTH / 2;
+  const playerY = WORLD_HEIGHT / 2;
+  world.active[PLAYER_ID] = 1;
+  world.x[PLAYER_ID] = playerX;
+  world.y[PLAYER_ID] = playerY;
+  world.w[PLAYER_ID] = 32;
+  world.h[PLAYER_ID] = 32;
+  world.speed[PLAYER_ID] = 200;
+  world.vx[PLAYER_ID] = 0;
+  world.vy[PLAYER_ID] = 0;
+  
+  // Create camera following the player with isometric view
+  const camera = createPlayerCamera(
+    { x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] },
+    canvas.width,
+    canvas.height,
+    0.15 // Smooth factor for camera follow
+  );
+  
+  // Set up isometric projection (rotate 45 degrees, scale Y by 0.5)
+  camera.setRotation(Math.PI / 4); // 45 degrees for isometric view
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
   const texture = await AssetLoader.loadTexture(
@@ -54,6 +79,12 @@ generateTestMap();
     lastTime = now;
     accumulator += Math.min(dt, 0.25); // Prevent spiral of death
 
+    // Update camera to follow player
+    camera.update(dt * 60); // Normalize to ~60fps
+    
+    // Sync camera target with player position
+    camera.setTarget({ x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] });
+
     // Fixed timestep updates
     while (accumulator >= FIXED_DT) {
       movementSystem.update(world, inputState, FIXED_DT);
@@ -65,23 +96,29 @@ generateTestMap();
     // Render Frame
     ctx.clear(ctx.COLOR_BUFFER_BIT);
 
+    // Get camera position for rendering
+    const camX = camera.getX();
+    const camY = camera.getY();
+
     // 1. Get floor data and render as SINGLE quad (1 draw call instead of 1024+)
     const floorData = mapRenderer.getFloorData(
-      0, 0, // Camera X, Y
-      WORLD_WIDTH,
-      WORLD_HEIGHT
+      camX, camY,
+      canvas.width,
+      canvas.height
     );
 
     // 2. Render seamless floor in ONE draw call
     renderer.renderFloor(
       floorData,
-      WORLD_WIDTH,
-      WORLD_HEIGHT,
-      texture
+      canvas.width,
+      canvas.height,
+      texture,
+      camX,
+      camY
     );
 
     // 3. Draw Entities on Top
-    renderer.render(world, WORLD_WIDTH, WORLD_HEIGHT, texture);
+    renderer.render(world, canvas.width, canvas.height, texture, camX, camY);
 
     requestAnimationFrame(loop);
   }
@@ -101,6 +138,14 @@ generateTestMap();
         console.warn('[Engine] No save data found! Press S to save first.');
       }
     }
+  });
+  
+  // Handle window resize
+  window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    ctx.viewport(0, 0, canvas.width, canvas.height);
+    camera.setViewport(canvas.width, canvas.height);
   });
 
   requestAnimationFrame(loop);

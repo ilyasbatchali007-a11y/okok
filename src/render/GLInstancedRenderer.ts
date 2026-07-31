@@ -1,23 +1,40 @@
 import { World } from '../ecs/World';
 
-// Vertex Shader Source
+// Vertex Shader Source - with isometric transformation support
 const VS_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
 layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
 layout(location = 2) in vec2 a_size;    // Entity size (width, height)
 
 uniform vec2 u_resolution;
+uniform float u_isoAngle;               // Isometric rotation angle
+uniform float u_isoScale;               // Y scale for isometric projection (typically 0.5)
+uniform vec2 u_cameraOffset;            // Camera offset for scrolling
 
 out vec2 v_uv;
 
 void main() {
   vec2 worldPos = a_pos + (a_quadPos * a_size);
-  // Convert screen coordinates [0, res] to WebGL clip space [-1, 1]
-  vec2 zeroToOne = worldPos / u_resolution;
+  
+  // Apply camera offset
+  vec2 camPos = worldPos - u_cameraOffset;
+  
+  // Center on screen
+  vec2 centeredPos = camPos - (u_resolution * 0.5);
+  
+  // Apply isometric transformation
+  // Rotate 45 degrees and scale Y by 0.5 for isometric look
+  float c = cos(u_isoAngle);
+  float s = sin(u_isoAngle);
+  vec2 isoPos;
+  isoPos.x = centeredPos.x * c - centeredPos.y * s;
+  isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
+  
+  // Convert to WebGL clip space [-1, 1]
+  vec2 zeroToOne = isoPos / (u_resolution * 0.5);
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
-
-  // Flip Y axis so 0,0 is top-left
+  
   gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);
   v_uv = a_quadPos;
 }
@@ -44,6 +61,15 @@ export class GLInstancedRenderer {
 
   private instanceData: Float32Array;
   private resolutionLoc: WebGLUniformLocation | null;
+  private isoAngleLoc: WebGLUniformLocation | null;
+  private isoScaleLoc: WebGLUniformLocation | null;
+  private cameraOffsetLoc: WebGLUniformLocation | null;
+  
+  // Isometric view defaults
+  private isoAngle: number = Math.PI / 4;  // 45 degrees
+  private isoScale: number = 0.5;          // Y compression for isometric
+  private cameraOffsetX: number = 0;
+  private cameraOffsetY: number = 0;
 
   constructor(gl: WebGL2RenderingContext, maxEntities: number) {
     this.gl = gl;
@@ -55,6 +81,9 @@ export class GLInstancedRenderer {
     this.program = this.createProgram(vs, fs);
 
     this.resolutionLoc = gl.getUniformLocation(this.program, 'u_resolution');
+    this.isoAngleLoc = gl.getUniformLocation(this.program, 'u_isoAngle');
+    this.isoScaleLoc = gl.getUniformLocation(this.program, 'u_isoScale');
+    this.cameraOffsetLoc = gl.getUniformLocation(this.program, 'u_cameraOffset');
 
     // Create & setup VAO
     const vao = gl.createVertexArray();
@@ -98,7 +127,8 @@ export class GLInstancedRenderer {
 
     gl.bindVertexArray(null);
   }
-public render(world: World, width: number, height: number, texture: WebGLTexture): void {
+  public render(world: World, width: number, height: number, texture: WebGLTexture, 
+                cameraX: number = 0, cameraY: number = 0): void {
     const gl = this.gl;
     const worldAny = world as any;
     
@@ -123,6 +153,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
 
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
+    gl.uniform1f(this.isoAngleLoc, this.isoAngle);
+    gl.uniform1f(this.isoScaleLoc, this.isoScale);
+    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -168,7 +201,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     floorData: { x: number; y: number; width: number; height: number },
     width: number,
     height: number,
-    texture: WebGLTexture
+    texture: WebGLTexture,
+    cameraX: number = 0,
+    cameraY: number = 0
   ): void {
     const gl = this.gl;
 
@@ -181,6 +216,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     // Draw single quad for the entire floor
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
+    gl.uniform1f(this.isoAngleLoc, this.isoAngle);
+    gl.uniform1f(this.isoScaleLoc, this.isoScale);
+    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
