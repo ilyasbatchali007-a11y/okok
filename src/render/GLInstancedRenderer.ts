@@ -346,7 +346,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
 
     gl.bindVertexArray(this.vao);
-    gl.drawElementsInstanced(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, 1); // Draw 1 instance (the floor)
+    // CRITICAL FIX: Explicitly draw 6 indices to form complete quad (2 triangles)
+    // Indices: [0,1,2, 0,2,3] forms two triangles covering all 4 vertices
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
     gl.bindVertexArray(null);
   }
 
