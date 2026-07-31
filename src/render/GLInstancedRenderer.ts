@@ -1,7 +1,7 @@
 import { World } from '../ecs/World';
 import { PLAYER_ID } from '../config/Constants';
 
-// Vertex Shader Source - with isometric transformation support
+// Vertex Shader Source - simplified isometric transformation
 const VS_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
 layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
@@ -15,16 +15,16 @@ uniform vec2 u_cameraOffset;            // Camera offset for scrolling
 out vec2 v_uv;
 
 void main() {
+  // Calculate world position from instance data
   vec2 worldPos = a_pos + (a_quadPos * a_size);
   
-  // Apply camera offset
-  vec2 camPos = worldPos - u_cameraOffset;
+  // Apply camera offset to get screen-relative position
+  vec2 screenPos = worldPos - u_cameraOffset;
   
   // Center on screen
-  vec2 centeredPos = camPos - (u_resolution * 0.5);
+  vec2 centeredPos = screenPos - (u_resolution * 0.5);
   
-  // Apply isometric transformation
-  // Rotate 45 degrees and scale Y by 0.5 for isometric look
+  // Apply isometric transformation: rotate 45° and scale Y by 0.5
   float c = cos(u_isoAngle);
   float s = sin(u_isoAngle);
   vec2 isoPos;
@@ -41,24 +41,31 @@ void main() {
 }
 `;
 
-// Fragment Shader Source
+// Fragment Shader Source - supports both floor and entity colors
 const FS_SOURCE = `#version 300 es
 precision mediump float;
 
 in vec2 v_uv;
 uniform sampler2D u_texture;
+uniform int u_renderMode;  // 0 = floor, 1 = entity
+uniform vec4 u_entityColor;
 out vec4 fragColor;
 
 void main() {
-  // Render as green checkered floor pattern
-  float gridX = mod(floor(v_uv.x * 8.0), 2.0);
-  float gridY = mod(floor(v_uv.y * 8.0), 2.0);
-  float checker = mod(gridX + gridY, 2.0);
-  
-  if (checker < 0.5) {
-    fragColor = vec4(0.2, 0.6, 0.2, 1.0);  // Dark green
+  if (u_renderMode == 1) {
+    // Render as solid red entity
+    fragColor = u_entityColor;
   } else {
-    fragColor = vec4(0.3, 0.7, 0.3, 1.0);  // Light green
+    // Render as green checkered floor pattern
+    float gridX = mod(floor(v_uv.x * 8.0), 2.0);
+    float gridY = mod(floor(v_uv.y * 8.0), 2.0);
+    float checker = mod(gridX + gridY, 2.0);
+    
+    if (checker < 0.5) {
+      fragColor = vec4(0.2, 0.6, 0.2, 1.0);  // Dark green
+    } else {
+      fragColor = vec4(0.3, 0.7, 0.3, 1.0);  // Light green
+    }
   }
 }
 `;
@@ -74,6 +81,8 @@ export class GLInstancedRenderer {
   private isoAngleLoc: WebGLUniformLocation | null;
   private isoScaleLoc: WebGLUniformLocation | null;
   private cameraOffsetLoc: WebGLUniformLocation | null;
+  private renderModeLoc: WebGLUniformLocation | null;
+  private entityColorLoc: WebGLUniformLocation | null;
   
   // Isometric view defaults
   private isoAngle: number = Math.PI / 4;  // 45 degrees
@@ -94,6 +103,8 @@ export class GLInstancedRenderer {
     this.isoAngleLoc = gl.getUniformLocation(this.program, 'u_isoAngle');
     this.isoScaleLoc = gl.getUniformLocation(this.program, 'u_isoScale');
     this.cameraOffsetLoc = gl.getUniformLocation(this.program, 'u_cameraOffset');
+    this.renderModeLoc = gl.getUniformLocation(this.program, 'u_renderMode');
+    this.entityColorLoc = gl.getUniformLocation(this.program, 'u_entityColor');
 
     // Create & setup VAO
     const vao = gl.createVertexArray();
@@ -207,6 +218,8 @@ export class GLInstancedRenderer {
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
     gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform1i(this.renderModeLoc, 1);  // Entity mode
+    gl.uniform4f(this.entityColorLoc, 1.0, 0.0, 0.0, 1.0);  // Red color
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -270,6 +283,7 @@ export class GLInstancedRenderer {
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
     gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform1i(this.renderModeLoc, 0);  // Floor mode
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
