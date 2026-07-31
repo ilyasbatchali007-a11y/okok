@@ -1,6 +1,7 @@
 import { World } from '../ecs/World';
+import { WORLD_WIDTH, WORLD_HEIGHT } from '../config/Constants';
 
-// Vertex Shader Source
+// Vertex Shader Source for Instanced Entities (unchanged)
 const VS_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
 layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
@@ -23,7 +24,7 @@ void main() {
 }
 `;
 
-// Fragment Shader Source
+// Fragment Shader Source for Instanced Entities (unchanged)
 const FS_SOURCE = `#version 300 es
 precision mediump float;
 
@@ -36,6 +37,28 @@ void main() {
 }
 `;
 
+// Vertex Shader for Floor Quad (3D, center-origin, X-Z plane)
+const FLOOR_VS_SOURCE = `#version 300 es
+layout(location = 0) in vec3 a_position;
+
+uniform mat4 u_modelViewProjection;
+
+void main() {
+  gl_Position = u_modelViewProjection * vec4(a_position, 1.0);
+}
+`;
+
+// Fragment Shader for Floor Quad (solid debug color - green)
+const FLOOR_FS_SOURCE = `#version 300 es
+precision mediump float;
+
+out vec4 fragColor;
+
+void main() {
+  fragColor = vec4(0.0, 1.0, 0.0, 1.0); // Solid green debug color
+}
+`;
+
 export class GLInstancedRenderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram;
@@ -44,6 +67,12 @@ export class GLInstancedRenderer {
 
   private instanceData: Float32Array;
   private resolutionLoc: WebGLUniformLocation | null;
+
+  // Floor Quad specific resources
+  private floorProgram: WebGLProgram;
+  private floorVAO: WebGLVertexArrayObject;
+  private floorIndexBuffer: WebGLBuffer;
+  private mvpLoc: WebGLUniformLocation | null;
 
   constructor(gl: WebGL2RenderingContext, maxEntities: number) {
     this.gl = gl;
@@ -95,6 +124,58 @@ export class GLInstancedRenderer {
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 16, 8);
     gl.vertexAttribDivisor(2, 1);
+
+    gl.bindVertexArray(null);
+
+    // === Floor Quad Setup (3D, center-origin, X-Z plane) ===
+    const floorVs = this.createShader(gl.VERTEX_SHADER, FLOOR_VS_SOURCE);
+    const floorFs = this.createShader(gl.FRAGMENT_SHADER, FLOOR_FS_SOURCE);
+    this.floorProgram = this.createProgram(floorVs, floorFs);
+    this.mvpLoc = gl.getUniformLocation(this.floorProgram, 'u_modelViewProjection');
+
+    // Create Floor VAO
+    const floorVAO = gl.createVertexArray();
+    if (!floorVAO) throw new Error('Failed to create floor VAO');
+    this.floorVAO = floorVAO;
+    gl.bindVertexArray(this.floorVAO);
+
+    // Define center-origin vertices for the quad on X-Z plane (Y=0)
+    // V0 (Near-Left  / -X, +Z): [-width/2, 0,  depth/2]
+    // V1 (Near-Right / +X, +Z): [ width/2, 0,  depth/2]
+    // V2 (Far-Left   / -X, -Z): [-width/2, 0, -depth/2]
+    // V3 (Far-Right  / +X, -Z): [ width/2, 0, -depth/2]
+    const floorWidth = WORLD_WIDTH;
+    const floorDepth = WORLD_HEIGHT;
+    const halfW = floorWidth / 2;
+    const halfD = floorDepth / 2;
+
+    const floorVertices = new Float32Array([
+      -halfW, 0,  halfD,  // V0: Near-Left
+       halfW, 0,  halfD,  // V1: Near-Right
+      -halfW, 0, -halfD,  // V2: Far-Left
+       halfW, 0, -halfD,  // V3: Far-Right
+    ]);
+
+    const floorVertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, floorVertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, floorVertices, gl.STATIC_DRAW);
+
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+
+    // Define true Counter-Clockwise (CCW) indices when looking down from +Y
+    // Triangle 1: [0, 2, 1]
+    // Triangle 2: [1, 2, 3]
+    const floorIndices = new Uint16Array([
+      0, 2, 1,  // Triangle 1
+      1, 2, 3,  // Triangle 2
+    ]);
+
+    const floorIndexBuffer = gl.createBuffer();
+    if (!floorIndexBuffer) throw new Error('Failed to create floor index buffer');
+    this.floorIndexBuffer = floorIndexBuffer;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.floorIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, floorIndices, gl.STATIC_DRAW);
 
     gl.bindVertexArray(null);
   }
@@ -172,24 +253,37 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
   ): void {
     const gl = this.gl;
 
-    // Pack floor data: x, y, width, height
-    this.instanceData[0] = floorData.x;
-    this.instanceData[1] = floorData.y;
-    this.instanceData[2] = floorData.width;
-    this.instanceData[3] = floorData.height;
+    // Use the floor quad program (3D, center-origin)
+    gl.useProgram(this.floorProgram);
 
-    // Draw single quad for the entire floor
-    gl.useProgram(this.program);
-    gl.uniform2f(this.resolutionLoc, width, height);
+    // Build orthographic projection matrix for X-Z plane centered at (0,0,0)
+    // We want to map world coordinates [0..width] x [0..height] to clip space [-1..1]
+    // The quad is centered at origin with vertices from -width/2 to +width/2 and -height/2 to +height/2
+    // Ortho matrix: maps [left, right] x [bottom, top] x [near, far] to [-1, 1]
+    const left = 0;
+    const right = width;
+    const bottom = 0;
+    const top = height;
+    const near = -1.0;
+    const far = 1.0;
 
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    const lr = 1.0 / (left - right);
+    const bt = 1.0 / (bottom - top);
+    const nf = 1.0 / (near - far);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+    // Row-major orthographic projection matrix
+    const mvp = new Float32Array([
+      2 * lr, 0, 0, 0,
+      0, 2 * bt, 0, 0,
+      0, 0, 2 * nf, 0,
+      (left + right) * lr, (top + bottom) * bt, (far + near) * nf, 1,
+    ]);
 
-    gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1); // Draw 1 instance (the floor)
+    gl.uniformMatrix4fv(this.mvpLoc, false, mvp);
+
+    // Bind floor VAO and draw using indexed triangles
+    gl.bindVertexArray(this.floorVAO);
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
     gl.bindVertexArray(null);
   }
 
