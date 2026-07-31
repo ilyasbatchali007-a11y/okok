@@ -52,6 +52,13 @@ canvas.height = window.innerHeight;
   world.vx[PLAYER_ID] = 0;
   world.vy[PLAYER_ID] = 0;
   
+  // Update sparse set for renderer
+  world.set.count = 1;
+  world.set.dense[0] = PLAYER_ID;
+  
+  // Set up isometric projection (rotate 45 degrees, scale Y by 0.5)
+  renderer.setIsometricView(Math.PI / 4, 0.5);
+  
   // Create camera following the player with isometric view
   const camera = createPlayerCamera(
     { x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] },
@@ -59,9 +66,7 @@ canvas.height = window.innerHeight;
     canvas.height,
     0.15 // Smooth factor for camera follow
   );
-  
-  // Set up isometric projection (rotate 45 degrees, scale Y by 0.5)
-  camera.setRotation(Math.PI / 4); // 45 degrees for isometric view
+  camera.snapToTarget();
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
   const texture = await AssetLoader.loadTexture(
@@ -69,8 +74,22 @@ canvas.height = window.innerHeight;
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
   );
 
+  // 4. Render initial floor to verify WebGL context is working
+  const floorData = mapRenderer.getFloorData(0, 0, canvas.width, canvas.height);
+  renderer.renderFloor(floorData, canvas.width, canvas.height, texture, 0, 0);
+
   // 5. Main Game Loop with Fixed Delta Time
   const inputState: Record<string, boolean> = {};
+  
+  // Handle keyboard input for movement
+  window.addEventListener('keydown', (e) => {
+    inputState[e.key] = true;
+  });
+  
+  window.addEventListener('keyup', (e) => {
+    inputState[e.key] = false;
+  });
+  
   let accumulator = 0;
   let lastTime = performance.now();
 
@@ -117,8 +136,8 @@ canvas.height = window.innerHeight;
       camY
     );
 
-    // 3. Draw Entities on Top
-    renderer.render(world, canvas.width, canvas.height, texture, camX, camY);
+    // 3. Draw Player Entity (red square) on Top
+    renderer.renderPlayer(world, canvas.width, canvas.height, texture, camX, camY);
 
     requestAnimationFrame(loop);
   }

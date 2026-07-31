@@ -1,4 +1,5 @@
 import { World } from '../ecs/World';
+import { PLAYER_ID } from '../config/Constants';
 
 // Vertex Shader Source - with isometric transformation support
 const VS_SOURCE = `#version 300 es
@@ -49,7 +50,16 @@ uniform sampler2D u_texture;
 out vec4 fragColor;
 
 void main() {
-  fragColor = texture(u_texture, v_uv);
+  // Render as green checkered floor pattern
+  float gridX = mod(floor(v_uv.x * 8.0), 2.0);
+  float gridY = mod(floor(v_uv.y * 8.0), 2.0);
+  float checker = mod(gridX + gridY, 2.0);
+  
+  if (checker < 0.5) {
+    fragColor = vec4(0.2, 0.6, 0.2, 1.0);  // Dark green
+  } else {
+    fragColor = vec4(0.3, 0.7, 0.3, 1.0);  // Light green
+  }
 }
 `;
 
@@ -127,12 +137,20 @@ export class GLInstancedRenderer {
 
     gl.bindVertexArray(null);
   }
+  
+  /**
+   * Set isometric view parameters
+   */
+  public setIsometricView(angleRadians: number, scaleY: number): void {
+    this.isoAngle = angleRadians;
+    this.isoScale = scaleY;
+  }
   public render(world: World, width: number, height: number, texture: WebGLTexture, 
                 cameraX: number = 0, cameraY: number = 0): void {
     const gl = this.gl;
     const worldAny = world as any;
     
-    // 💡 SAFE CHECK: Return early if world or world.set is not ready
+    // SAFE CHECK: Return early if world or world.set is not ready
     if (!worldAny || !worldAny.set) return;
     
     const count = worldAny.set.count;
@@ -165,6 +183,39 @@ export class GLInstancedRenderer {
 
     gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+    gl.bindVertexArray(null);
+  }
+  
+  /**
+   * Render player entity with red color
+   */
+  public renderPlayer(world: World, width: number, height: number, texture: WebGLTexture,
+                      cameraX: number = 0, cameraY: number = 0): void {
+    const gl = this.gl;
+    const worldAny = world as any;
+    
+    if (!worldAny || !worldAny.active || !worldAny.active[PLAYER_ID]) return;
+    
+    // Pack single player entity
+    this.instanceData[0] = worldAny.px[PLAYER_ID];
+    this.instanceData[1] = worldAny.py[PLAYER_ID];
+    this.instanceData[2] = worldAny.width[PLAYER_ID];
+    this.instanceData[3] = worldAny.height[PLAYER_ID];
+
+    gl.useProgram(this.program);
+    gl.uniform2f(this.resolutionLoc, width, height);
+    gl.uniform1f(this.isoAngleLoc, this.isoAngle);
+    gl.uniform1f(this.isoScaleLoc, this.isoScale);
+    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+
+    gl.bindVertexArray(this.vao);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1);
     gl.bindVertexArray(null);
   }
 
