@@ -12,14 +12,6 @@ import { SaveManager } from './serialization/SaveManager';
 // 💡 ADDITION: Initialize MapRenderer
 const mapRenderer = new MapRenderer();
 
-// Example map settings (adjust these dimensions to fit your map!)
-const MAP_WIDTH_TILES = 100;
-const MAP_HEIGHT_TILES = 100;
-const TILE_SIZE = 32;
-
-// Create a simple map array filled with tile IDs (0 = grass, 1 = dirt, etc.)
-const mapData: number[] = new Array(MAP_WIDTH_TILES * MAP_HEIGHT_TILES).fill(0);
-
 async function initEngine() {
   // 1. Setup Canvas & WebGL2 Context
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
@@ -73,27 +65,22 @@ generateTestMap();
     // Render Frame
     ctx.clear(ctx.COLOR_BUFFER_BIT);
 
-    // 1. Get visible tile data from MapRenderer FIRST
-    const tileData = mapRenderer.getVisibleTileData(
+    // 1. Get floor data and render as SINGLE quad (1 draw call instead of 1024+)
+    const floorData = mapRenderer.getFloorData(
       0, 0, // Camera X, Y
       WORLD_WIDTH,
       WORLD_HEIGHT
     );
 
-    // 2. Debug log (Check browser console F12)
-    console.log("TILES TO DRAW:", tileData.count);
-
-    // 3. Render map tiles on floor
-    renderer.renderTiles(
-      tileData.buffer,
-      tileData.count,
-      TILE_SIZE,
+    // 2. Render seamless floor in ONE draw call
+    renderer.renderFloor(
+      floorData,
       WORLD_WIDTH,
       WORLD_HEIGHT,
       texture
     );
 
-    // 4. Draw Entities on Top
+    // 3. Draw Entities on Top
     renderer.render(world, WORLD_WIDTH, WORLD_HEIGHT, texture);
 
     requestAnimationFrame(loop);

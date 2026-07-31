@@ -164,6 +164,35 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     return prog;
   }
 
+  public renderFloor(
+    floorData: { x: number; y: number; width: number; height: number },
+    width: number,
+    height: number,
+    texture: WebGLTexture
+  ): void {
+    const gl = this.gl;
+
+    // Pack floor data: x, y, width, height
+    this.instanceData[0] = floorData.x;
+    this.instanceData[1] = floorData.y;
+    this.instanceData[2] = floorData.width;
+    this.instanceData[3] = floorData.height;
+
+    // Draw single quad for the entire floor
+    gl.useProgram(this.program);
+    gl.uniform2f(this.resolutionLoc, width, height);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+
+    gl.bindVertexArray(this.vao);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1); // Draw 1 instance (the floor)
+    gl.bindVertexArray(null);
+  }
+
   public renderTiles(
   tileBuffer: Float32Array, 
   count: number, 
