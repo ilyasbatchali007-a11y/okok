@@ -9,6 +9,7 @@ import { CollisionSystem } from './systems/CollisionSystem';
 import { GLInstancedRenderer } from './render/GLInstancedRenderer';
 import { AssetLoader } from './engine/AssetLoader';
 import { SaveManager } from './serialization/SaveManager';
+import { Camera } from './engine/Camera';
 // 💡 ADDITION: Initialize MapRenderer
 const mapRenderer = new MapRenderer();
 
@@ -25,7 +26,7 @@ canvas.height = WORLD_HEIGHT;
   if (!gl) throw new Error('WebGL 2 is not supported.');
 
   // Create a guaranteed non-null reference for TypeScript closures
-  const ctx: WebGL2RenderingContext = gl as WebGL2RenderingContext;
+  const ctx: WebGL2RenderingContext = gl;
 
   ctx.viewport(0, 0, canvas.width, canvas.height);
   ctx.clearColor(0.1, 0.1, 0.12, 1.0);
@@ -36,7 +37,13 @@ canvas.height = WORLD_HEIGHT;
   // CollisionSystem does not require constructor parameters
   const collisionSystem = new CollisionSystem();
   const renderer = new GLInstancedRenderer(ctx, MAX_ENTITIES);
-generateTestMap();
+  
+  // Initialize camera for isometric view and player following
+  const camera = new Camera();
+  camera.setViewport(canvas.width, canvas.height);
+  camera.setMapBounds(WORLD_WIDTH, WORLD_HEIGHT);
+  
+  generateTestMap();
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
   const texture = await AssetLoader.loadTexture(
@@ -62,26 +69,35 @@ generateTestMap();
       accumulator -= FIXED_DT;
     }
 
+    // Update camera position (follows player if target is set)
+    camera.update(dt * 60); // Normalize to ~60fps
+
+    // Get camera position for rendering
+    const cameraX = camera.getX();
+    const cameraY = camera.getY();
+
     // Render Frame
     ctx.clear(ctx.COLOR_BUFFER_BIT);
 
     // 1. Get floor data and render as SINGLE quad (1 draw call instead of 1024+)
     const floorData = mapRenderer.getFloorData(
-      0, 0, // Camera X, Y
+      cameraX, cameraY, // Pass camera position for isometric transform
       WORLD_WIDTH,
       WORLD_HEIGHT
     );
 
-    // 2. Render seamless floor in ONE draw call
+    // 2. Render seamless floor in ONE draw call with isometric transform
     renderer.renderFloor(
       floorData,
       WORLD_WIDTH,
       WORLD_HEIGHT,
-      texture
+      texture,
+      cameraX,
+      cameraY
     );
 
-    // 3. Draw Entities on Top
-    renderer.render(world, WORLD_WIDTH, WORLD_HEIGHT, texture);
+    // 3. Draw Entities on Top with same isometric transform
+    renderer.render(world, WORLD_WIDTH, WORLD_HEIGHT, texture, cameraX, cameraY);
 
     requestAnimationFrame(loop);
   }
