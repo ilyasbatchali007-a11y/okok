@@ -1,19 +1,36 @@
 import { World } from '../ecs/World';
+import { TILE_SIZE } from '../config/MapData';
 
-// Vertex Shader Source
+// Isometric projection constants
+const ISO_ANGLE = Math.atan(0.5); // ~26.565 degrees for classic isometric
+const COS_ISO = Math.cos(ISO_ANGLE);
+const SIN_ISO = Math.sin(ISO_ANGLE);
+
+// Vertex Shader Source with unified isometric transformation
 const VS_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
 layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
 layout(location = 2) in vec2 a_size;    // Entity size (width, height)
 
 uniform vec2 u_resolution;
+uniform mat4 u_isoMatrix;      // Isometric transformation matrix
+uniform vec2 u_cameraOffset;   // Camera scroll offset
 
 out vec2 v_uv;
 
 void main() {
+  // Calculate world position from instance data
   vec2 worldPos = a_pos + (a_quadPos * a_size);
+  
+  // Apply isometric transformation in the shader (unified approach)
+  // This transforms Cartesian coordinates to isometric view
+  vec4 isoPos = u_isoMatrix * vec4(worldPos, 0.0, 1.0);
+  
+  // Apply camera offset
+  vec2 screenPos = isoPos.xy - u_cameraOffset;
+  
   // Convert screen coordinates [0, res] to WebGL clip space [-1, 1]
-  vec2 zeroToOne = worldPos / u_resolution;
+  vec2 zeroToOne = screenPos / u_resolution;
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
 
@@ -44,6 +61,8 @@ export class GLInstancedRenderer {
 
   private instanceData: Float32Array;
   private resolutionLoc: WebGLUniformLocation | null;
+  private isoMatrixLoc: WebGLUniformLocation | null;
+  private cameraOffsetLoc: WebGLUniformLocation | null;
 
   constructor(gl: WebGL2RenderingContext, maxEntities: number) {
     this.gl = gl;
@@ -55,6 +74,8 @@ export class GLInstancedRenderer {
     this.program = this.createProgram(vs, fs);
 
     this.resolutionLoc = gl.getUniformLocation(this.program, 'u_resolution');
+    this.isoMatrixLoc = gl.getUniformLocation(this.program, 'u_isoMatrix');
+    this.cameraOffsetLoc = gl.getUniformLocation(this.program, 'u_cameraOffset');
 
     // Create & setup VAO
     const vao = gl.createVertexArray();
@@ -98,6 +119,48 @@ export class GLInstancedRenderer {
 
     gl.bindVertexArray(null);
   }
+
+  /**
+   * Build isometric projection matrix for shader uniform
+   * Transforms Cartesian world coordinates to isometric screen space
+   */
+  private buildIsometricMatrix(): Float32Array {
+    // Classic isometric projection: rotate 45°, then scale Y by 0.5
+    // This creates the 2:1 pixel ratio characteristic of isometric view
+    const cos45 = Math.SQRT1_2; // ~0.707
+    const sin45 = Math.SQRT1_2;
+    
+    // Combined rotation + scale matrix for isometric view
+    // [ cos45  -sin45   0   0 ]
+    // [ sin45   cos45   0   0 ] * scale(1, 0.5)
+    // [ 0       0       1   0 ]
+    // [ 0       0       0   1 ]
+    
+    return new Float32Array([
+      cos45, sin45 * 0.5, 0, 0,   // Column 0: X basis (scaled Y component by 0.5)
+      -sin45, cos45 * 0.5, 0, 0,  // Column 1: Y basis (scaled Y component by 0.5)
+      0, 0, 1, 0,                  // Column 2: Z basis
+      0, 0, 0, 1                   // Column 3: Translation
+    ]);
+  }
+
+  /**
+   * Set isometric transformation and camera uniforms for all render calls
+   */
+  private setIsoUniforms(cameraX: number, cameraY: number): void {
+    const gl = this.gl;
+    
+    // Apply unified isometric matrix
+    const isoMatrix = this.buildIsometricMatrix();
+    if (this.isoMatrixLoc) {
+      gl.uniformMatrix4fv(this.isoMatrixLoc, false, isoMatrix);
+    }
+    
+    // Apply camera offset in isometric space
+    if (this.cameraOffsetLoc) {
+      gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    }
+  }
 public render(world: World, width: number, height: number, texture: WebGLTexture): void {
     const gl = this.gl;
     const worldAny = world as any;
@@ -123,6 +186,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
 
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
+
+    // Apply unified isometric transformation to ALL entities
+    this.setIsoUniforms(0, 0); // Camera offset can be passed from main loop
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -168,7 +234,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     floorData: { x: number; y: number; width: number; height: number },
     width: number,
     height: number,
-    texture: WebGLTexture
+    texture: WebGLTexture,
+    cameraX: number = 0,
+    cameraY: number = 0
   ): void {
     const gl = this.gl;
 
@@ -178,9 +246,12 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     this.instanceData[2] = floorData.width;
     this.instanceData[3] = floorData.height;
 
-    // Draw single quad for the entire floor
+    // Draw single quad for the entire floor with isometric transform
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
+
+    // Apply unified isometric transformation to floor (same as entities)
+    this.setIsoUniforms(cameraX, cameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -199,7 +270,9 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
   tileSize: number, 
   width: number, 
   height: number, 
-  texture: WebGLTexture
+  texture: WebGLTexture,
+  cameraX: number = 0,
+  cameraY: number = 0
 ): void {
   if (count === 0) return;
 
@@ -218,9 +291,12 @@ public render(world: World, width: number, height: number, texture: WebGLTexture
     this.instanceData[offset++] = tileSize; // Height
   }
 
-  // 2. Draw using WebGL
+  // 2. Draw using WebGL with unified isometric transformation
   gl.useProgram(this.program);
   gl.uniform2f(this.resolutionLoc, width, height);
+
+  // Apply unified isometric transformation to tiles (same as floor and entities)
+  this.setIsoUniforms(cameraX, cameraY);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);

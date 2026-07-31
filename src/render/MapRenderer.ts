@@ -1,6 +1,7 @@
 // SRC/render/MapRenderer.ts
 // Optimized single-quad floor renderer - renders entire floor as ONE rectangle
 // Reduces draw calls from 1024+ to 1 for maximum performance
+// Now supports unified isometric transformation via shader/camera matrix
 
 import { WORLD_WIDTH, WORLD_HEIGHT } from '../config/Constants';
 
@@ -15,6 +16,7 @@ export class MapRenderer {
   /**
    * Returns a single floor rectangle covering the entire visible area
    * This replaces the tile-by-tile rendering with one seamless quad
+   * Isometric transformation is applied in the shader via camera matrix
    */
   public getFloorData(
     cameraX: number,
@@ -23,7 +25,7 @@ export class MapRenderer {
     viewportHeight: number
   ): IFloorRenderData {
     // Return the entire world as one seamless floor rectangle
-    // Camera offset is applied by the renderer/camera system
+    // Isometric transform is applied in the vertex shader, not here
     return {
       x: 0,
       y: 0,
