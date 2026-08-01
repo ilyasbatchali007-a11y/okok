@@ -57,7 +57,7 @@ canvas.height = window.innerHeight;
   world.set.dense[0] = PLAYER_ID;
   
   // Set up isometric projection (rotate 45 degrees, scale Y by 0.5)
-  renderer.setIsometricView(Math.PI / 4, 0.5, 16);
+  renderer.setIsometricView(Math.PI / 4, 0.5);
   
   // Create camera following the player with isometric view
   const camera = createPlayerCamera(
