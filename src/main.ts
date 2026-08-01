@@ -1,5 +1,5 @@
 // 1. Ensure CELL_SIZE is exported from './config/Constants'
-import { generateTestMap } from './config/MapData';
+import { generateTestMap, MAP_DATA } from './config/MapData';
 import { MapRenderer } from './render/MapRenderer';
 import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, CELL_SIZE, PLAYER_ID } from './config/Constants';
 import { World } from './ecs/World';
@@ -38,9 +38,12 @@ canvas.height = window.innerHeight;
   // CollisionSystem does not require constructor parameters
   const collisionSystem = new CollisionSystem();
   const renderer = new GLInstancedRenderer(ctx, MAX_ENTITIES);
-  generateTestMap();
   
-  // Spawn player entity at center of map
+  // Generate test map BEFORE spawning player
+  generateTestMap();
+  console.log('[Engine] Map generated, size:', MAP_DATA.length, 'tiles');
+  
+  // Spawn player entity at center of map (avoiding border walls)
   const playerX = WORLD_WIDTH / 2;
   const playerY = WORLD_HEIGHT / 2;
   world.active[PLAYER_ID] = 1;
