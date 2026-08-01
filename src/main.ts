@@ -117,8 +117,8 @@ canvas.height = window.innerHeight;
     const camX = camera.getX();
     const camY = camera.getY();
 
-    // Only recalculate floor data if camera moved
-    if (cameraMoved) {
+    // Always recalculate floor data on first few frames OR when camera moved
+    if (cameraMoved || lastTime === now) { // First frame condition
       // 1. Get floor data and render as SINGLE quad (1 draw call instead of 1024+)
       const floorData = mapRenderer.getFloorData(
         camX, camY,
