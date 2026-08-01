@@ -66,7 +66,8 @@ canvas.height = window.innerHeight;
     canvas.height,
     0.15 // Smooth factor for camera follow
   );
-  camera.snapToTarget();
+  // Don't snap immediately - let the first update() call handle positioning
+  // This ensures cameraMoved returns true on the first frame
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
   const texture = await AssetLoader.loadTexture(
@@ -74,11 +75,7 @@ canvas.height = window.innerHeight;
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
   );
 
-  // 4. Render initial floor to verify WebGL context is working
-  const floorData = mapRenderer.getFloorData(0, 0, canvas.width, canvas.height);
-  renderer.renderFloor(floorData, canvas.width, canvas.height, texture, 0, 0);
-
-  // 5. Main Game Loop with Fixed Delta Time
+  // 4. Main Game Loop with Fixed Delta Time
   const inputState: Record<string, boolean> = {};
   
   // Handle keyboard input for movement
