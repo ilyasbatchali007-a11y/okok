@@ -99,8 +99,13 @@ export class Camera {
     if (!this.target) return false;
 
     // Calculate ideal camera position (centered on target)
-    const targetX = this.target.x - this.viewportWidth / 2;
-    const targetY = this.target.y - this.viewportHeight / 2;
+    let targetX = this.target.x - this.viewportWidth / 2;
+    let targetY = this.target.y - this.viewportHeight / 2;
+
+    // Clamp target to map bounds BEFORE interpolation
+    // This prevents overshooting and vibration against boundaries
+    targetX = Math.max(this.minX, Math.min(this.maxX, targetX));
+    targetY = Math.max(this.minY, Math.min(this.maxY, targetY));
 
     // Check if already within epsilon threshold of target
     const dx = targetX - this.x;
@@ -117,15 +122,9 @@ export class Camera {
     // Formula: factor = 1 - e^(-lambda * dt)
     const factor = 1 - Math.exp(-this.lambda * deltaTime);
     
-    // Apply interpolation
-    const newX = lerp(this.x, targetX, factor);
-    const newY = lerp(this.y, targetY, factor);
-    
-    this.x = newX;
-    this.y = newY;
-
-    // Clamp to map bounds
-    this.clampToBounds();
+    // Apply interpolation to pre-clamped targets
+    this.x = lerp(this.x, targetX, factor);
+    this.y = lerp(this.y, targetY, factor);
     
     return true;
   }
