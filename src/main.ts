@@ -1,5 +1,5 @@
 // 1. Ensure CELL_SIZE is exported from './config/Constants'
-import { generateTestMap } from './config/MapData';
+import { generateTestMap, MAP_DATA } from './config/MapData';
 import { MapRenderer } from './render/MapRenderer';
 import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, CELL_SIZE, PLAYER_ID } from './config/Constants';
 import { World } from './ecs/World';
@@ -38,9 +38,12 @@ canvas.height = window.innerHeight;
   // CollisionSystem does not require constructor parameters
   const collisionSystem = new CollisionSystem();
   const renderer = new GLInstancedRenderer(ctx, MAX_ENTITIES);
-  generateTestMap();
   
-  // Spawn player entity at center of map
+  // Generate test map BEFORE spawning player
+  generateTestMap();
+  console.log('[Engine] Map generated, size:', MAP_DATA.length, 'tiles');
+  
+  // Spawn player entity at center of map (avoiding border walls)
   const playerX = WORLD_WIDTH / 2;
   const playerY = WORLD_HEIGHT / 2;
   world.active[PLAYER_ID] = 1;
@@ -66,6 +69,8 @@ canvas.height = window.innerHeight;
     canvas.height,
     0.15 // Smooth factor for camera follow
   );
+  
+  // Initialize camera position to player position so map is visible on first frame
   camera.snapToTarget();
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
@@ -74,11 +79,7 @@ canvas.height = window.innerHeight;
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
   );
 
-  // 4. Render initial floor to verify WebGL context is working
-  const floorData = mapRenderer.getFloorData(0, 0, canvas.width, canvas.height);
-  renderer.renderFloor(floorData, canvas.width, canvas.height, texture, 0, 0);
-
-  // 5. Main Game Loop with Fixed Delta Time
+  // 4. Main Game Loop with Fixed Delta Time
   const inputState: Record<string, boolean> = {};
   
   // Handle keyboard input for movement
@@ -98,11 +99,11 @@ canvas.height = window.innerHeight;
     lastTime = now;
     accumulator += Math.min(dt, 0.25); // Prevent spiral of death
 
-    // Update camera to follow player
-    camera.update(dt * 60); // Normalize to ~60fps
-    
     // Sync camera target with player position
     camera.setTarget({ x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] });
+    
+    // Update camera and check if it moved
+    const cameraMoved = camera.update(dt * 60); // Normalize to ~60fps
 
     // Fixed timestep updates
     while (accumulator >= FIXED_DT) {
@@ -119,22 +120,35 @@ canvas.height = window.innerHeight;
     const camX = camera.getX();
     const camY = camera.getY();
 
-    // 1. Get floor data and render as SINGLE quad (1 draw call instead of 1024+)
-    const floorData = mapRenderer.getFloorData(
-      camX, camY,
-      canvas.width,
-      canvas.height
-    );
+    // Always recalculate floor data on first few frames OR when camera moved
+    if (cameraMoved || lastTime === now) { // First frame condition
+      // 1. Get floor data and render as SINGLE quad (1 draw call instead of 1024+)
+      const floorData = mapRenderer.getFloorData(
+        camX, camY,
+        canvas.width,
+        canvas.height
+      );
 
-    // 2. Render seamless floor in ONE draw call
-    renderer.renderFloor(
-      floorData,
-      canvas.width,
-      canvas.height,
-      texture,
-      camX,
-      camY
-    );
+      // 2. Render seamless floor in ONE draw call
+      renderer.renderFloor(
+        floorData,
+        canvas.width,
+        canvas.height,
+        texture,
+        camX,
+        camY
+      );
+    } else {
+      // Re-render floor without recalculating data
+      renderer.renderFloor(
+        null,
+        canvas.width,
+        canvas.height,
+        texture,
+        camX,
+        camY
+      );
+    }
 
     // 3. Draw Player Entity (red square) on Top
     renderer.renderPlayer(world, canvas.width, canvas.height, texture, camX, camY);

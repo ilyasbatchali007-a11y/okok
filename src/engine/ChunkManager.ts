@@ -184,8 +184,9 @@ export class ChunkManager {
   ): IChunk[] {
     const visibleChunks: IChunk[] = [];
 
-    // Calculate visible tile range from camera position
-    const padding = TILE_SIZE * 2; // Extra padding for isometric projection
+    // Calculate visible tile range from camera position with 1-chunk padding border
+    // This prevents visual pop-in during fast panning/zooming by keeping extra chunks active
+    const padding = TILE_SIZE * 2 + CHUNK_SIZE; // Extra padding for isometric projection + 1 chunk border
     const minTileX = Math.floor((cameraX - padding) / TILE_SIZE);
     const minTileY = Math.floor((cameraY - padding) / TILE_SIZE);
     const maxTileX = Math.ceil((cameraX + viewportWidth + padding) / TILE_SIZE);

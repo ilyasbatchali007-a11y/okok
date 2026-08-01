@@ -145,10 +145,6 @@ export const GameEvents = {
   PLAYER_DAMAGED: 'player:damaged',
   PLAYER_DIED: 'player:died',
   
-  // Camera events
-  CAMERA_MOVED: 'camera:moved',
-  CAMERA_TARGET_CHANGED: 'camera:target_changed',
-  
   // Input events
   KEY_PRESSED: 'input:key_pressed',
   KEY_RELEASED: 'input:key_released',
