@@ -61,7 +61,7 @@ canvas.height = window.innerHeight;
   
   // Create camera following the player with isometric view
   const camera = createPlayerCamera(
-    { x: world.x[PLAYER_ID] + 16, y: world.y[PLAYER_ID] + 16 }, // Center of player
+    { x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] }, // Track player position directly
     canvas.width,
     canvas.height,
     0.15 // Smooth factor for camera follow
@@ -102,8 +102,8 @@ canvas.height = window.innerHeight;
     // Update camera to follow player
     camera.update(dt * 60); // Normalize to ~60fps
     
-    // Sync camera target with player position (center of player)
-    camera.setTarget({ x: world.x[PLAYER_ID] + 16, y: world.y[PLAYER_ID] + 16 });
+    // Sync camera target with player position
+    camera.setTarget({ x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] });
 
     // Fixed timestep updates
     while (accumulator >= FIXED_DT) {
