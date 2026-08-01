@@ -27,10 +27,10 @@ void main() {
   // Calculate world position based on which face we're rendering
   vec2 worldPos;
   
-  if (face == 0) {
+  if (face < 0.5) {
     // Top face - use entity position as-is (top-left corner)
     worldPos = basePos + (uv * size);
-  } else if (face == 1) {
+  } else if (face < 1.5) {
     // Left face - offset down by box height from top edge
     worldPos = basePos + vec2(0.0, size.y) + vec2(0.0, -u_boxHeight) + (uv * size);
   } else {
@@ -58,9 +58,9 @@ void main() {
   v_face = face;
   
   // Lighting based on face
-  if (face == 0) {
+  if (face < 0.5) {
     v_light = 1.0;      // Top face - brightest
-  } else if (face == 1) {
+  } else if (face < 1.5) {
     v_light = 0.65;     // Left face - darkest
   } else {
     v_light = 0.85;     // Right face - medium
@@ -81,7 +81,7 @@ uniform vec4 u_entityColor;
 out vec4 fragColor;
 
 void main() {
-  if (u_renderMode == 1) {
+  if (u_renderMode > 0.5) {
     // Render as solid red entity with face-based lighting for 3D effect
     vec3 color = u_entityColor.rgb * v_light;
     fragColor = vec4(color, u_entityColor.a);
