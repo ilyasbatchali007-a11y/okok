@@ -1,29 +1,57 @@
 import { World } from '../ecs/World';
 import { PLAYER_ID } from '../config/Constants';
 
-// Vertex Shader Source - standard camera-centered isometric projection
+// Vertex Shader Source - Isometric box with 3 visible faces
 const VS_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
 layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
 layout(location = 2) in vec2 a_size;    // Entity size (width, height)
+layout(location = 3) in float a_face;   // Face index: 0=top, 1=left, 2=right
 
 uniform vec2 u_resolution;
 uniform float u_isoAngle;               // Isometric rotation angle
 uniform float u_isoScale;               // Y scale for isometric projection (typically 0.5)
 uniform vec2 u_cameraOffset;            // Camera offset for scrolling
+uniform float u_zoom;                   // Zoom factor
 
 out vec2 v_uv;
+out float v_face;
+out float v_lighting;
 
 void main() {
-  vec2 worldPos = a_pos + (a_quadPos * a_size);
+  float width = a_size.x;
+  float height = a_size.y;
+  float depth = height * 0.5;  // Box depth is half the height
+  
+  vec2 worldPos;
+  float lighting = 1.0;
+  
+  if (a_face < 0.5) {
+    // TOP face
+    worldPos = a_pos + (a_quadPos * a_size);
+    worldPos.y -= depth;  // Shift top face up
+    lighting = 1.0;
+  } else if (a_face < 1.5) {
+    // LEFT face
+    worldPos = a_pos + vec2(a_quadPos.x * width, 0.0);
+    worldPos.y += (1.0 - a_quadPos.y) * depth;
+    lighting = 0.7;
+  } else {
+    // RIGHT face  
+    worldPos = a_pos + vec2(width, a_quadPos.y * height);
+    worldPos.x += (a_quadPos.x - 1.0) * depth;
+    worldPos.y += depth;
+    lighting = 0.85;
+  }
+  
   vec2 relPos = worldPos - u_cameraOffset;
 
   // Standard 2.5D Isometric projection:
   float c = cos(u_isoAngle);
   float s = sin(u_isoAngle);
   vec2 isoPos;
-  isoPos.x = (relPos.x - relPos.y) * c;
-  isoPos.y = (relPos.x + relPos.y) * s * u_isoScale;
+  isoPos.x = (relPos.x - relPos.y) * c * u_zoom;
+  isoPos.y = (relPos.x + relPos.y) * s * u_isoScale * u_zoom;
 
   // Add viewport center offset:
   vec2 screenPos = isoPos + (u_resolution * 0.5);
@@ -31,14 +59,18 @@ void main() {
 
   gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);
   v_uv = a_quadPos;
+  v_face = a_face;
+  v_lighting = lighting;
 }
 `;
 
-// Fragment Shader Source - supports both floor and entity colors
+// Fragment Shader Source - supports both floor and entity colors with lighting
 const FS_SOURCE = `#version 300 es
 precision mediump float;
 
 in vec2 v_uv;
+in float v_face;
+in float v_lighting;
 uniform sampler2D u_texture;
 uniform int u_renderMode;  // 0 = floor, 1 = entity
 uniform vec4 u_entityColor;
@@ -46,8 +78,9 @@ out vec4 fragColor;
 
 void main() {
   if (u_renderMode > 0) {
-    // Render as solid red entity
-    fragColor = u_entityColor;
+    // Render as solid red entity with lighting
+    vec3 color = u_entityColor.rgb * v_lighting;
+    fragColor = vec4(color, u_entityColor.a);
   } else {
     // Render as green checkered floor pattern
     float gridX = mod(floor(v_uv.x * 8.0), 2.0);
@@ -76,17 +109,19 @@ export class GLInstancedRenderer {
   private cameraOffsetLoc: WebGLUniformLocation | null;
   private renderModeLoc: WebGLUniformLocation | null;
   private entityColorLoc: WebGLUniformLocation | null;
+  private zoomLoc: WebGLUniformLocation | null;
   
   // Isometric view defaults
   private isoAngle: number = Math.PI / 4;  // 45 degrees
   private isoScale: number = 0.5;          // Y compression for isometric
   private cameraOffsetX: number = 0;
   private cameraOffsetY: number = 0;
+  private zoom: number = 2.0;              // Zoom in on player
 
   constructor(gl: WebGL2RenderingContext, maxEntities: number) {
     this.gl = gl;
-    // 4 floats per instance: px, py, width, height
-    this.instanceData = new Float32Array(maxEntities * 4);
+    // 5 floats per instance: px, py, width, height, faceIndex
+    this.instanceData = new Float32Array(maxEntities * 5);
 
     const vs = this.createShader(gl.VERTEX_SHADER, VS_SOURCE);
     const fs = this.createShader(gl.FRAGMENT_SHADER, FS_SOURCE);
@@ -98,6 +133,7 @@ export class GLInstancedRenderer {
     this.cameraOffsetLoc = gl.getUniformLocation(this.program, 'u_cameraOffset');
     this.renderModeLoc = gl.getUniformLocation(this.program, 'u_renderMode');
     this.entityColorLoc = gl.getUniformLocation(this.program, 'u_entityColor');
+    this.zoomLoc = gl.getUniformLocation(this.program, 'u_zoom');
 
     // Create & setup VAO
     const vao = gl.createVertexArray();
@@ -123,7 +159,7 @@ export class GLInstancedRenderer {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
 
-    // 2. Dynamic Instance Buffer (pos & size)
+    // 2. Dynamic Instance Buffer (pos, size, face)
     const instBuffer = gl.createBuffer();
     if (!instBuffer) throw new Error('Failed to create instance buffer');
     this.instanceBuffer = instBuffer;
@@ -133,13 +169,18 @@ export class GLInstancedRenderer {
 
     // Attribute 1: Position (px, py)
     gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 0);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 0);
     gl.vertexAttribDivisor(1, 1);
 
     // Attribute 2: Size (width, height)
     gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 16, 8);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 20, 8);
     gl.vertexAttribDivisor(2, 1);
+
+    // Attribute 3: Face index
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 20, 16);
+    gl.vertexAttribDivisor(3, 1);
 
     gl.bindVertexArray(null);
   }
@@ -194,7 +235,7 @@ export class GLInstancedRenderer {
   }
   
   /**
-   * Render player entity with red color
+   * Render player entity as a 3D box with red color
    */
   public renderPlayer(world: World, width: number, height: number, texture: WebGLTexture,
                       cameraX: number = 0, cameraY: number = 0): void {
@@ -203,17 +244,39 @@ export class GLInstancedRenderer {
     
     if (!worldAny || !worldAny.active || !worldAny.active[PLAYER_ID]) return;
     
-    // Pack single player entity
-    this.instanceData[0] = worldAny.px[PLAYER_ID];
-    this.instanceData[1] = worldAny.py[PLAYER_ID];
-    this.instanceData[2] = worldAny.width[PLAYER_ID];
-    this.instanceData[3] = worldAny.height[PLAYER_ID];
+    const px = worldAny.px[PLAYER_ID];
+    const py = worldAny.py[PLAYER_ID];
+    const w = worldAny.width[PLAYER_ID];
+    const h = worldAny.height[PLAYER_ID];
+    
+    // Pack 3 faces for the box: top(0), left(1), right(2)
+    // Each face: px, py, width, height, faceIndex
+    let offset = 0;
+    // Top face
+    this.instanceData[offset++] = px;
+    this.instanceData[offset++] = py;
+    this.instanceData[offset++] = w;
+    this.instanceData[offset++] = h;
+    this.instanceData[offset++] = 0.0;  // face = 0 (top)
+    // Left face
+    this.instanceData[offset++] = px;
+    this.instanceData[offset++] = py;
+    this.instanceData[offset++] = w;
+    this.instanceData[offset++] = h;
+    this.instanceData[offset++] = 1.0;  // face = 1 (left)
+    // Right face
+    this.instanceData[offset++] = px;
+    this.instanceData[offset++] = py;
+    this.instanceData[offset++] = w;
+    this.instanceData[offset++] = h;
+    this.instanceData[offset++] = 2.0;  // face = 2 (right)
 
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
     gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform1f(this.zoomLoc, this.zoom);
     gl.uniform1i(this.renderModeLoc, 1);  // Entity mode
     gl.uniform4f(this.entityColorLoc, 1.0, 0.0, 0.0, 1.0);  // Red color
 
@@ -221,10 +284,10 @@ export class GLInstancedRenderer {
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 15)); // 3 faces * 5 floats
 
     gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1); // Draw 1 instance (the player)
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 3); // Draw 3 instances (3 faces)
     gl.bindVertexArray(null);
   }
 
