@@ -7,5 +7,5 @@ dist/
 build/
 
 # Vite specific
-.vite/
+node_modules/.vite/
 ```

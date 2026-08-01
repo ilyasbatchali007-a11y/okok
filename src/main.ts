@@ -41,8 +41,8 @@ canvas.height = window.innerHeight;
   generateTestMap();
   
   // Spawn player entity at center of map
-  const playerX = WORLD_WIDTH / 2;
-  const playerY = WORLD_HEIGHT / 2;
+  const playerX = WORLD_WIDTH / 2 - 16; // Center player (subtract half width)
+  const playerY = WORLD_HEIGHT / 2 - 16; // Center player (subtract half height)
   world.active[PLAYER_ID] = 1;
   world.x[PLAYER_ID] = playerX;
   world.y[PLAYER_ID] = playerY;
@@ -57,15 +57,16 @@ canvas.height = window.innerHeight;
   world.set.dense[0] = PLAYER_ID;
   
   // Set up isometric projection (rotate 45 degrees, scale Y by 0.5)
-  renderer.setIsometricView(Math.PI / 4, 0.5);
+  renderer.setIsometricView(Math.PI / 4, 0.5, 16);
   
   // Create camera following the player with isometric view
   const camera = createPlayerCamera(
-    { x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] },
+    { x: world.x[PLAYER_ID] + 16, y: world.y[PLAYER_ID] + 16 }, // Center of player
     canvas.width,
     canvas.height,
     0.15 // Smooth factor for camera follow
   );
+  // Snap camera to player immediately so player starts centered
   camera.snapToTarget();
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
@@ -101,8 +102,8 @@ canvas.height = window.innerHeight;
     // Update camera to follow player
     camera.update(dt * 60); // Normalize to ~60fps
     
-    // Sync camera target with player position
-    camera.setTarget({ x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] });
+    // Sync camera target with player position (center of player)
+    camera.setTarget({ x: world.x[PLAYER_ID] + 16, y: world.y[PLAYER_ID] + 16 });
 
     // Fixed timestep updates
     while (accumulator >= FIXED_DT) {
