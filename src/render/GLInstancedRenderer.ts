@@ -81,7 +81,7 @@ uniform vec4 u_entityColor;
 out vec4 fragColor;
 
 void main() {
-  if (u_renderMode > 0.5) {
+  if (u_renderMode > 0) {
     // Render as solid red entity with face-based lighting for 3D effect
     vec3 color = u_entityColor.rgb * v_light;
     fragColor = vec4(color, u_entityColor.a);

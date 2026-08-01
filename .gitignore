@@ -1,8 +1,1 @@
-```
-# Build artifacts
-dist/
-build/
-
-# Dependencies
-node_modules/
-```
+(src/render/GLInstancedRenderer.ts)
