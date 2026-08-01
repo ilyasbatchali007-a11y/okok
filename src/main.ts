@@ -41,8 +41,8 @@ canvas.height = window.innerHeight;
   generateTestMap();
   
   // Spawn player entity at center of map
-  const playerX = WORLD_WIDTH / 2;
-  const playerY = WORLD_HEIGHT / 2;
+  const playerX = 1000;
+  const playerY = 1000;
   world.active[PLAYER_ID] = 1;
   world.x[PLAYER_ID] = playerX;
   world.y[PLAYER_ID] = playerY;
