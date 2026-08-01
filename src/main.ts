@@ -60,6 +60,7 @@ canvas.height = window.innerHeight;
   renderer.setIsometricView(Math.PI / 4, 0.5);
   
   // Create camera following the player with isometric view
+  // Camera will keep player centered on screen
   const camera = createPlayerCamera(
     { x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] },
     canvas.width,
