@@ -31,6 +31,7 @@ export class Camera {
   
   private target: ICameraTarget | null = null;
   private smoothFactor: number = 0.1; // Lerp factor (0-1, higher = snappier)
+  private lambda: number = -Math.log(1 - 0.1); // Exponential decay constant for frame-rate independence
   
   private viewportWidth: number = 800;
   private viewportHeight: number = 600;
@@ -62,6 +63,7 @@ export class Camera {
    */
   public setSmoothFactor(factor: number): void {
     this.smoothFactor = clamp(factor, 0.01, 1.0);
+    this.lambda = -Math.log(1 - this.smoothFactor);
   }
 
   /**
@@ -88,23 +90,32 @@ export class Camera {
   }
 
   /**
-   * Update camera position with lerp towards target
+   * Update camera position with frame-rate independent exponential decay
    * Call every frame before rendering
+   * @returns true if camera moved, false otherwise
    */
-  public update(deltaTime: number = 1): void {
-    if (!this.target) return;
+  public update(deltaTime: number = 1): boolean {
+    if (!this.target) return false;
 
     // Calculate ideal camera position (centered on target)
     const targetX = this.target.x - this.viewportWidth / 2;
     const targetY = this.target.y - this.viewportHeight / 2;
 
-    // Smooth interpolation (Lerp)
-    // Formula: CamPos = CamPos + (TargetPos - CamPos) * smoothFactor
-    this.x = lerp(this.x, targetX, this.smoothFactor * deltaTime);
-    this.y = lerp(this.y, targetY, this.smoothFactor * deltaTime);
+    // Frame-rate independent exponential decay
+    // Formula: factor = 1 - e^(-lambda * dt)
+    const factor = 1 - Math.exp(-this.lambda * deltaTime);
+    
+    // Apply interpolation
+    const newX = lerp(this.x, targetX, factor);
+    const newY = lerp(this.y, targetY, factor);
+    
+    this.x = newX;
+    this.y = newY;
 
     // Clamp to map bounds
     this.clampToBounds();
+    
+    return true;
   }
 
   /**
