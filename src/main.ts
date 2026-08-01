@@ -66,8 +66,9 @@ canvas.height = window.innerHeight;
     canvas.height,
     0.15 // Smooth factor for camera follow
   );
-  // Don't snap immediately - let the first update() call handle positioning
-  // This ensures cameraMoved returns true on the first frame
+  
+  // Initialize camera position to player position so map is visible on first frame
+  camera.snapToTarget();
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
   const texture = await AssetLoader.loadTexture(
