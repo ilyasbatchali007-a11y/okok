@@ -62,12 +62,15 @@ canvas.height = window.innerHeight;
   // Set up isometric projection (rotate 45 degrees, scale Y by 0.5)
   renderer.setIsometricView(Math.PI / 4, 0.5);
   
-  // Create camera following the player with isometric view
+  // Create camera following the player with isometric view and offset
+  // Offset positions camera to show more of the map above the player
   const camera = createPlayerCamera(
     { x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] },
     canvas.width,
     canvas.height,
-    0.15 // Smooth factor for camera follow
+    0.15, // Smooth factor for camera follow
+    0,    // offsetX (adjust to shift camera left/right relative to player)
+    -50   // offsetY (negative moves camera up, showing more area above player)
   );
   
   // Initialize camera position to player position so map is visible on first frame
