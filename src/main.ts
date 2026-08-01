@@ -103,6 +103,9 @@ canvas.height = window.innerHeight;
     
     // Sync camera target with player position
     camera.setTarget({ x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] });
+    
+    // Update camera orbit angle for revolving effect
+    renderer.updateCameraOrbit(dt);
 
     // Fixed timestep updates
     while (accumulator >= FIXED_DT) {
@@ -136,7 +139,7 @@ canvas.height = window.innerHeight;
       camY
     );
 
-    // 3. Draw Player Entity (red square) on Top
+    // 3. Draw Player Entity (red cube) on Top
     renderer.renderPlayer(world, canvas.width, canvas.height, texture, camX, camY);
 
     requestAnimationFrame(loop);
