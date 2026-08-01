@@ -98,11 +98,11 @@ canvas.height = window.innerHeight;
     lastTime = now;
     accumulator += Math.min(dt, 0.25); // Prevent spiral of death
 
-    // Update camera to follow player
-    camera.update(dt * 60); // Normalize to ~60fps
-    
     // Sync camera target with player position
     camera.setTarget({ x: world.x[PLAYER_ID], y: world.y[PLAYER_ID] });
+    
+    // Update camera and check if it moved
+    const cameraMoved = camera.update(dt * 60); // Normalize to ~60fps
 
     // Fixed timestep updates
     while (accumulator >= FIXED_DT) {
@@ -119,22 +119,35 @@ canvas.height = window.innerHeight;
     const camX = camera.getX();
     const camY = camera.getY();
 
-    // 1. Get floor data and render as SINGLE quad (1 draw call instead of 1024+)
-    const floorData = mapRenderer.getFloorData(
-      camX, camY,
-      canvas.width,
-      canvas.height
-    );
+    // Only recalculate floor data if camera moved
+    if (cameraMoved) {
+      // 1. Get floor data and render as SINGLE quad (1 draw call instead of 1024+)
+      const floorData = mapRenderer.getFloorData(
+        camX, camY,
+        canvas.width,
+        canvas.height
+      );
 
-    // 2. Render seamless floor in ONE draw call
-    renderer.renderFloor(
-      floorData,
-      canvas.width,
-      canvas.height,
-      texture,
-      camX,
-      camY
-    );
+      // 2. Render seamless floor in ONE draw call
+      renderer.renderFloor(
+        floorData,
+        canvas.width,
+        canvas.height,
+        texture,
+        camX,
+        camY
+      );
+    } else {
+      // Re-render floor without recalculating data
+      renderer.renderFloor(
+        null,
+        canvas.width,
+        canvas.height,
+        texture,
+        camX,
+        camY
+      );
+    }
 
     // 3. Draw Player Entity (red square) on Top
     renderer.renderPlayer(world, canvas.width, canvas.height, texture, camX, camY);
