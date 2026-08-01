@@ -32,6 +32,7 @@ export class Camera {
   private target: ICameraTarget | null = null;
   private smoothFactor: number = 0.1; // Lerp factor (0-1, higher = snappier)
   private lambda: number = -Math.log(1 - 0.1); // Exponential decay constant for frame-rate independence
+  private readonly EPSILON: number = 0.01; // Position convergence threshold in world units
   
   private viewportWidth: number = 800;
   private viewportHeight: number = 600;
@@ -100,6 +101,17 @@ export class Camera {
     // Calculate ideal camera position (centered on target)
     const targetX = this.target.x - this.viewportWidth / 2;
     const targetY = this.target.y - this.viewportHeight / 2;
+
+    // Check if already within epsilon threshold of target
+    const dx = targetX - this.x;
+    const dy = targetY - this.y;
+    
+    if (Math.abs(dx) < this.EPSILON && Math.abs(dy) < this.EPSILON) {
+      // Snap to target and indicate no movement
+      this.x = targetX;
+      this.y = targetY;
+      return false;
+    }
 
     // Frame-rate independent exponential decay
     // Formula: factor = 1 - e^(-lambda * dt)
