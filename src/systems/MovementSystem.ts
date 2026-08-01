@@ -14,10 +14,10 @@ export class MovementSystem {
     let dirX = 0;
     let dirY = 0;
 
-    if (keys['w'] || keys['arrowup']) dirY -= 1;
-    if (keys['s'] || keys['arrowdown']) dirY += 1;
-    if (keys['a'] || keys['arrowleft']) dirX -= 1;
-    if (keys['d'] || keys['arrowright']) dirX += 1;
+    if (keys['w'] || keys['W'] || keys['ArrowUp'] || keys['arrowup']) dirY -= 1;
+    if (keys['s'] || keys['S'] || keys['ArrowDown'] || keys['arrowdown']) dirY += 1;
+    if (keys['a'] || keys['A'] || keys['ArrowLeft'] || keys['arrowleft']) dirX -= 1;
+    if (keys['d'] || keys['D'] || keys['ArrowRight'] || keys['arrowright']) dirX += 1;
 
     const length = Math.hypot(dirX, dirY);
     if (length > 0) {
