@@ -21,15 +21,12 @@ void main() {
   // Apply camera offset to get screen-relative position
   vec2 screenPos = worldPos - u_cameraOffset;
   
-  // Center on screen
-  vec2 centeredPos = screenPos - (u_resolution * 0.5);
-  
   // Apply isometric transformation: rotate 45° and scale Y by 0.5
   float c = cos(u_isoAngle);
   float s = sin(u_isoAngle);
   vec2 isoPos;
-  isoPos.x = centeredPos.x * c - centeredPos.y * s;
-  isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
+  isoPos.x = screenPos.x * c - screenPos.y * s;
+  isoPos.y = (screenPos.x * s + screenPos.y * c) * u_isoScale;
   
   // Convert to WebGL clip space [-1, 1]
   vec2 zeroToOne = isoPos / (u_resolution * 0.5);
