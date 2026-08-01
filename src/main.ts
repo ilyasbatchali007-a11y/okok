@@ -40,14 +40,16 @@ canvas.height = window.innerHeight;
   const renderer = new GLInstancedRenderer(ctx, MAX_ENTITIES);
   generateTestMap();
   
-  // Spawn player entity at center of map
+  // Spawn player entity at center of map as a 3D box
   const playerX = WORLD_WIDTH / 2;
   const playerY = WORLD_HEIGHT / 2;
   world.active[PLAYER_ID] = 1;
   world.x[PLAYER_ID] = playerX;
   world.y[PLAYER_ID] = playerY;
-  world.w[PLAYER_ID] = 32;
-  world.h[PLAYER_ID] = 32;
+  world.z[PLAYER_ID] = 16;  // Height off ground (half of box height)
+  world.w[PLAYER_ID] = 32;  // Width
+  world.h[PLAYER_ID] = 32;  // Height
+  world.d[PLAYER_ID] = 32;  // Depth (for 3D box)
   world.speed[PLAYER_ID] = 200;
   world.vx[PLAYER_ID] = 0;
   world.vy[PLAYER_ID] = 0;
@@ -67,6 +69,10 @@ canvas.height = window.innerHeight;
     0.15 // Smooth factor for camera follow
   );
   camera.snapToTarget();
+  
+  // Camera rotation state for revolving around player
+  let cameraRotationAngle = 0;
+  const cameraRotationSpeed = 0.3; // Radians per second
 
   // 3. Load Placeholder Texture (1x1 White Pixel fallback)
   const texture = await AssetLoader.loadTexture(
@@ -97,6 +103,10 @@ canvas.height = window.innerHeight;
     const dt = (now - lastTime) / 1000;
     lastTime = now;
     accumulator += Math.min(dt, 0.25); // Prevent spiral of death
+
+    // Update camera rotation angle for revolving around player
+    cameraRotationAngle += cameraRotationSpeed * dt;
+    renderer.setCameraRotation(cameraRotationAngle);
 
     // Update camera to follow player
     camera.update(dt * 60); // Normalize to ~60fps
@@ -136,7 +146,7 @@ canvas.height = window.innerHeight;
       camY
     );
 
-    // 3. Draw Player Entity (red square) on Top
+    // 3. Draw Player Entity (red 3D box) on Top
     renderer.renderPlayer(world, canvas.width, canvas.height, texture, camX, camY);
 
     requestAnimationFrame(loop);
