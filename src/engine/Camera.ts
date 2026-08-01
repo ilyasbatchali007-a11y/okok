@@ -43,6 +43,12 @@ export class Camera {
   // For isometric projection
   private isHalfWidth: number = TILE_SIZE / 2;
   private isHalfHeight: number = TILE_SIZE / 4;
+  
+  // Matrix caching to avoid allocations
+  private viewProjectionMatrix: Float32Array = new Float32Array(16);
+  private viewMatrix: Float32Array = new Float32Array(16);
+  private projectionMatrix: Float32Array = new Float32Array(16);
+  private isMatrixDirty: boolean = true;
 
   /**
    * Set the camera target (player/entity to follow)
@@ -80,6 +86,7 @@ export class Camera {
   public setViewport(width: number, height: number): void {
     this.viewportWidth = width;
     this.viewportHeight = height;
+    this.isMatrixDirty = true;
   }
 
   /**
@@ -88,6 +95,7 @@ export class Camera {
   public setMapBounds(width: number, height: number): void {
     this.mapWidth = width;
     this.mapHeight = height;
+    this.isMatrixDirty = true;
   }
 
   /**
@@ -104,8 +112,10 @@ export class Camera {
 
     // Clamp target to map bounds BEFORE interpolation
     // This prevents overshooting and vibration against boundaries
-    targetX = Math.max(this.minX, Math.min(this.maxX, targetX));
-    targetY = Math.max(this.minY, Math.min(this.maxY, targetY));
+    const maxX = Math.max(0, this.mapWidth - this.viewportWidth);
+    const maxY = Math.max(0, this.mapHeight - this.viewportHeight);
+    targetX = Math.max(0, Math.min(maxX, targetX));
+    targetY = Math.max(0, Math.min(maxY, targetY));
 
     // Check if already within epsilon threshold of target
     const dx = targetX - this.x;
@@ -115,6 +125,7 @@ export class Camera {
       // Snap to target and indicate no movement
       this.x = targetX;
       this.y = targetY;
+      this.isMatrixDirty = false;
       return false;
     }
 
@@ -126,6 +137,8 @@ export class Camera {
     this.x = lerp(this.x, targetX, factor);
     this.y = lerp(this.y, targetY, factor);
     
+    // Mark matrices as dirty since position changed
+    this.isMatrixDirty = true;
     return true;
   }
 
@@ -136,6 +149,7 @@ export class Camera {
     this.x = x;
     this.y = y;
     this.clampToBounds();
+    this.isMatrixDirty = true;
   }
 
   /**
@@ -147,6 +161,7 @@ export class Camera {
     this.x = this.target.x - this.viewportWidth / 2;
     this.y = this.target.y - this.viewportHeight / 2;
     this.clampToBounds();
+    this.isMatrixDirty = true;
   }
 
   /**
@@ -169,6 +184,7 @@ export class Camera {
     this.x += dx;
     this.y += dy;
     this.clampToBounds();
+    this.isMatrixDirty = true;
   }
 
   /**
@@ -176,6 +192,7 @@ export class Camera {
    */
   public setZoom(zoom: number): void {
     this.zoom = clamp(zoom, 0.5, 3.0);
+    this.isMatrixDirty = true;
   }
 
   /**
@@ -220,22 +237,24 @@ export class Camera {
 
   /**
    * Convert world coordinates to screen coordinates
+   * @param out Optional output object to reuse (avoids allocation)
    */
-  public worldToScreen(worldX: number, worldY: number): { x: number; y: number } {
-    return {
-      x: worldX - this.x,
-      y: worldY - this.y
-    };
+  public worldToScreen(worldX: number, worldY: number, out?: { x: number; y: number }): { x: number; y: number } {
+    const result = out || { x: 0, y: 0 };
+    result.x = worldX - this.x;
+    result.y = worldY - this.y;
+    return result;
   }
 
   /**
    * Convert screen coordinates to world coordinates
+   * @param out Optional output object to reuse (avoids allocation)
    */
-  public screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
-    return {
-      x: screenX + this.x,
-      y: screenY + this.y
-    };
+  public screenToWorld(screenX: number, screenY: number, out?: { x: number; y: number }): { x: number; y: number } {
+    const result = out || { x: 0, y: 0 };
+    result.x = screenX + this.x;
+    result.y = screenY + this.y;
+    return result;
   }
 
   /**
@@ -279,9 +298,13 @@ export class Camera {
 
   /**
    * Get view-projection matrix for shader uniform
-   * Returns a 4x4 matrix as Float32Array (column-major order for WebGL)
+   * Returns a cached 4x4 matrix as Float32Array (column-major order for WebGL)
    */
   public getViewProjectionMatrix(): Float32Array {
+    if (!this.isMatrixDirty) {
+      return this.viewProjectionMatrix;
+    }
+    
     // Simple orthographic projection matrix
     const left = this.x;
     const right = this.x + this.viewportWidth;
@@ -292,30 +315,66 @@ export class Camera {
     const lr = 1 / (left - right);
     const bt = 1 / (bottom - top);
     
-    return new Float32Array([
-      2 * lr, 0, 0, 0,
-      0, 2 * bt, 0, 0,
-      0, 0, -1, 0,
-      (right + left) * lr, (top + bottom) * bt, 0, 1
-    ]);
+    this.viewProjectionMatrix[0] = 2 * lr;
+    this.viewProjectionMatrix[1] = 0;
+    this.viewProjectionMatrix[2] = 0;
+    this.viewProjectionMatrix[3] = 0;
+    this.viewProjectionMatrix[4] = 0;
+    this.viewProjectionMatrix[5] = 2 * bt;
+    this.viewProjectionMatrix[6] = 0;
+    this.viewProjectionMatrix[7] = 0;
+    this.viewProjectionMatrix[8] = 0;
+    this.viewProjectionMatrix[9] = 0;
+    this.viewProjectionMatrix[10] = -1;
+    this.viewProjectionMatrix[11] = 0;
+    this.viewProjectionMatrix[12] = (right + left) * lr;
+    this.viewProjectionMatrix[13] = (top + bottom) * bt;
+    this.viewProjectionMatrix[14] = 0;
+    this.viewProjectionMatrix[15] = 1;
+    
+    this.isMatrixDirty = false;
+    return this.viewProjectionMatrix;
   }
 
   /**
    * Get view matrix (camera transform only, without projection)
+   * Returns a cached 4x4 matrix as Float32Array
    */
   public getViewMatrix(): Float32Array {
-    return new Float32Array([
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      -this.x, -this.y, 0, 1
-    ]);
+    if (!this.isMatrixDirty) {
+      return this.viewMatrix;
+    }
+    
+    this.viewMatrix[0] = 1;
+    this.viewMatrix[1] = 0;
+    this.viewMatrix[2] = 0;
+    this.viewMatrix[3] = 0;
+    this.viewMatrix[4] = 0;
+    this.viewMatrix[5] = 1;
+    this.viewMatrix[6] = 0;
+    this.viewMatrix[7] = 0;
+    this.viewMatrix[8] = 0;
+    this.viewMatrix[9] = 0;
+    this.viewMatrix[10] = 1;
+    this.viewMatrix[11] = 0;
+    this.viewMatrix[12] = -this.x;
+    this.viewMatrix[13] = -this.y;
+    this.viewMatrix[14] = 0;
+    this.viewMatrix[15] = 1;
+    
+    this.isMatrixDirty = false;
+    return this.viewMatrix;
   }
 
   /**
    * Get projection matrix for current viewport
+   * Returns a cached 4x4 matrix as Float32Array
    */
   public getProjectionMatrix(): Float32Array {
+    if (!this.isMatrixDirty) {
+      return this.projectionMatrix;
+    }
+    
     const left = 0;
     const right = this.viewportWidth;
     const top = 0;
@@ -324,12 +383,25 @@ export class Camera {
     const lr = 1 / (left - right);
     const bt = 1 / (bottom - top);
     
-    return new Float32Array([
-      2 * lr, 0, 0, 0,
-      0, 2 * bt, 0, 0,
-      0, 0, -1, 0,
-      (right + left) * lr, (top + bottom) * bt, 0, 1
-    ]);
+    this.projectionMatrix[0] = 2 * lr;
+    this.projectionMatrix[1] = 0;
+    this.projectionMatrix[2] = 0;
+    this.projectionMatrix[3] = 0;
+    this.projectionMatrix[4] = 0;
+    this.projectionMatrix[5] = 2 * bt;
+    this.projectionMatrix[6] = 0;
+    this.projectionMatrix[7] = 0;
+    this.projectionMatrix[8] = 0;
+    this.projectionMatrix[9] = 0;
+    this.projectionMatrix[10] = -1;
+    this.projectionMatrix[11] = 0;
+    this.projectionMatrix[12] = (right + left) * lr;
+    this.projectionMatrix[13] = (top + bottom) * bt;
+    this.projectionMatrix[14] = 0;
+    this.projectionMatrix[15] = 1;
+    
+    this.isMatrixDirty = false;
+    return this.projectionMatrix;
   }
 
   /**
