@@ -34,6 +34,10 @@ export class Camera {
   private lambda: number = -Math.log(1 - 0.1); // Exponential decay constant for frame-rate independence
   private readonly EPSILON: number = 0.01; // Position convergence threshold in world units
   
+  // Static offset from target (player) position
+  private offsetX: number = 0;
+  private offsetY: number = 0;
+  
   private viewportWidth: number = 800;
   private viewportHeight: number = 600;
   
@@ -55,6 +59,23 @@ export class Camera {
    */
   public setTarget(target: ICameraTarget): void {
     this.target = target;
+  }
+
+  /**
+   * Set a static offset for the camera relative to the target
+   * This allows the camera to maintain a fixed position offset while still following the player
+   */
+  public setOffset(offsetX: number, offsetY: number): void {
+    this.offsetX = offsetX;
+    this.offsetY = offsetY;
+    this.isMatrixDirty = true;
+  }
+
+  /**
+   * Get current offset values
+   */
+  public getOffset(): { offsetX: number; offsetY: number } {
+    return { offsetX: this.offsetX, offsetY: this.offsetY };
   }
 
   /**
@@ -106,9 +127,9 @@ export class Camera {
   public update(deltaTime: number = 1): boolean {
     if (!this.target) return false;
 
-    // Calculate ideal camera position (centered on target)
-    let targetX = this.target.x - this.viewportWidth / 2;
-    let targetY = this.target.y - this.viewportHeight / 2;
+    // Calculate ideal camera position (centered on target + static offset)
+    let targetX = this.target.x - this.viewportWidth / 2 + this.offsetX;
+    let targetY = this.target.y - this.viewportHeight / 2 + this.offsetY;
 
     // Clamp target to map bounds BEFORE interpolation
     // This prevents overshooting and vibration against boundaries
@@ -158,8 +179,8 @@ export class Camera {
   public snapToTarget(): void {
     if (!this.target) return;
     
-    this.x = this.target.x - this.viewportWidth / 2;
-    this.y = this.target.y - this.viewportHeight / 2;
+    this.x = this.target.x - this.viewportWidth / 2 + this.offsetX;
+    this.y = this.target.y - this.viewportHeight / 2 + this.offsetY;
     this.clampToBounds();
     this.isMatrixDirty = true;
   }
@@ -449,12 +470,15 @@ export function createPlayerCamera(
   player: ICameraTarget,
   viewportWidth: number,
   viewportHeight: number,
-  smoothFactor: number = 0.1
+  smoothFactor: number = 0.1,
+  offsetX: number = 0,
+  offsetY: number = 0
 ): Camera {
   const camera = new Camera();
   camera.setTarget(player);
   camera.setViewport(viewportWidth, viewportHeight);
   camera.setSmoothFactor(smoothFactor);
+  camera.setOffset(offsetX, offsetY);
   
   return camera;
 }
