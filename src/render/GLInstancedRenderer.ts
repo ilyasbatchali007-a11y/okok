@@ -53,25 +53,25 @@ void main() {
   vec2 screenPos = vec2(worldPos.x, worldPos.y);
   float vertHeight = worldPos.z;
   
-  // Convert to WebGL clip space [-1, 1]
-  // First: subtract camera offset to get camera-relative position
-  vec2 cameraRelPos = screenPos - u_cameraOffset;
-  
-  // Center on screen by adding half resolution
-  vec2 centeredPos = cameraRelPos + (u_resolution * 0.5);
-  
-  // Apply isometric transformation: rotate 45° and scale Y by 0.5
+  // Apply isometric transformation FIRST to world coordinates
   float c = cos(u_isoAngle);
   float s = sin(u_isoAngle);
   vec2 isoPos;
-  isoPos.x = centeredPos.x * c - centeredPos.y * s;
-  isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
+  isoPos.x = screenPos.x * c - screenPos.y * s;
+  isoPos.y = (screenPos.x * s + screenPos.y * c) * u_isoScale;
   
   // Add height offset to Y position for 3D effect (push down based on vertex height)
   isoPos.y -= vertHeight * 0.8;
   
+  // Convert to WebGL clip space [-1, 1]
+  // Now subtract camera offset in ISOMETRIC space
+  vec2 cameraRelPos = isoPos - (u_cameraOffset * vec2(c, s * u_isoScale));
+  
+  // Center on screen by adding half resolution
+  vec2 centeredPos = cameraRelPos + (u_resolution * 0.5);
+  
   // Normalize to [-1, 1] clip space
-  vec2 zeroToOne = isoPos / (u_resolution * 0.5);
+  vec2 zeroToOne = centeredPos / (u_resolution * 0.5);
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
   
