@@ -20,29 +20,35 @@ void main() {
   float width = a_size.x;
   float depth = a_size.y;
   float height = a_pos.z;
+  float posX = a_pos.x;
+  float posY = a_pos.y;
   
   vec3 worldPos;
   vec2 uv;
   
   if (a_faceId == 0.0) {
     // TOP FACE: lies at y=height, spans width x depth
-    worldPos = vec3(a_pos.x + a_quadPos.x * width, a_pos.y + height, a_pos.y + a_quadPos.y * depth);
+    worldPos = vec3(posX + a_quadPos.x * width, posY + height, posY + a_quadPos.y * depth);
     uv = a_quadPos;
   } else if (a_faceId == 1.0) {
     // LEFT FACE: vertical face on the left side (spans X and Y)
-    worldPos = vec3(a_pos.x + a_quadPos.x * width, a_pos.y + a_quadPos.y * height, a_pos.y + depth);
+    worldPos = vec3(posX + a_quadPos.x * width, posY + a_quadPos.y * height, posY + depth);
     uv = a_quadPos;
   } else {
     // RIGHT FACE: vertical face on the right side (spans Z and Y)
-    worldPos = vec3(a_pos.x + width, a_pos.y + a_quadPos.y * height, a_pos.y + a_quadPos.x * depth);
+    worldPos = vec3(posX + width, posY + a_quadPos.y * height, posY + a_quadPos.x * depth);
     uv = a_quadPos;
   }
   
-  // Apply camera offset to get screen-relative position
-  vec2 screenPos = worldPos.xz - u_cameraOffset;
+  // Apply camera offset to get screen-relative position (worldPos.xz is already in world space)
+  vec2 screenPos = worldPos.xz;
   
-  // Center on screen
-  vec2 centeredPos = screenPos - (u_resolution * 0.5);
+  // Convert to WebGL clip space [-1, 1]
+  // First: subtract camera offset to get camera-relative position
+  vec2 cameraRelPos = screenPos - u_cameraOffset;
+  
+  // Center on screen by adding half resolution
+  vec2 centeredPos = cameraRelPos + (u_resolution * 0.5);
   
   // Apply isometric transformation: rotate 45° and scale Y by 0.5
   float c = cos(u_isoAngle);
@@ -51,10 +57,10 @@ void main() {
   isoPos.x = centeredPos.x * c - centeredPos.y * s;
   isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
   
-  // Add height offset to Y position for 3D effect
+  // Add height offset to Y position for 3D effect (push down based on worldPos.y which is the vertical/Y height)
   isoPos.y -= worldPos.y * 0.8;
   
-  // Convert to WebGL clip space [-1, 1]
+  // Normalize to [-1, 1] clip space
   vec2 zeroToOne = isoPos / (u_resolution * 0.5);
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
@@ -265,6 +271,8 @@ export class GLInstancedRenderer {
     const entityHeight = worldAny.h[PLAYER_ID];
     const boxHeight = worldAny.jumpVel ? Math.max(0, 24 + worldAny.jumpVel[PLAYER_ID] * 0.05) : 24; // Visual jump effect
     const facing = worldAny.facing ? worldAny.facing[PLAYER_ID] : 1; // Default facing right
+    
+    console.log('[RenderPlayer] pos:', px, py, 'size:', entityWidth, entityHeight, 'height:', boxHeight, 'facing:', facing);
     
     // Determine which faces to show based on facing direction
     // 0=up, 1=right, 2=down, 3=left
