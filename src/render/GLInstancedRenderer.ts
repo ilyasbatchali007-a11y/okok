@@ -14,7 +14,7 @@ uniform float u_isoScale;                 // Y scale for isometric projection (t
 uniform vec2 u_cameraOffset;              // Camera offset for scrolling
 
 out vec2 v_uv;
-out int v_faceId;
+flat out int v_faceId;
 
 void main() {
   float width = a_size.x;
