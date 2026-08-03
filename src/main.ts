@@ -69,8 +69,8 @@ canvas.height = window.innerHeight;
     canvas.width,
     canvas.height,
     0.15, // Smooth factor for camera follow
-    0,   // offsetX (no offset - camera centers on player)
-    0     // offsetY (no offset - camera centers on player)
+    -320,   // offsetX - position camera to show more map area
+    -100     // offsetY - adjust vertical framing
   );
   
   // Initialize camera position to player position so map is visible on first frame

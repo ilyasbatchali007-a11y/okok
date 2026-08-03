@@ -40,28 +40,28 @@ void main() {
     uv = a_quadPos;
   }
   
-  // Apply camera offset to get screen-relative position
-  vec2 screenPos = vec2(worldPos.x, worldPos.z);
+  // Apply isometric transformation FIRST in world space
+  float c = cos(u_isoAngle);
+  float s = sin(u_isoAngle);
+  vec2 isoWorldPos;
+  isoWorldPos.x = worldPos.x * c - worldPos.z * s;
+  isoWorldPos.y = (worldPos.x * s + worldPos.z * c) * u_isoScale;
+  
+  // Now apply camera offset to get screen-relative position
+  vec2 screenPos = isoWorldPos;
   
   // Convert to WebGL clip space [-1, 1]
-  // First: subtract camera offset to get camera-relative position
+  // Subtract camera offset (which is already in isometric space) to get camera-relative position
   vec2 cameraRelPos = screenPos - u_cameraOffset;
   
   // Center on screen by adding half resolution
   vec2 centeredPos = cameraRelPos + (u_resolution * 0.5);
   
-  // Apply isometric transformation: rotate 45° and scale Y by 0.5
-  float c = cos(u_isoAngle);
-  float s = sin(u_isoAngle);
-  vec2 isoPos;
-  isoPos.x = centeredPos.x * c - centeredPos.y * s;
-  isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
-  
-  // Add height offset to Y position for 3D effect (push down based on worldPos.y which is the vertical height)
-  isoPos.y -= worldPos.y * 0.8;
+  // Add height offset to Y position for 3D effect
+  centeredPos.y -= worldPos.y * 0.8;
   
   // Normalize to [-1, 1] clip space
-  vec2 zeroToOne = isoPos / (u_resolution * 0.5);
+  vec2 zeroToOne = centeredPos / (u_resolution * 0.5);
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
   
@@ -238,11 +238,18 @@ export class GLInstancedRenderer {
       this.instanceData[offset++] = 0.0;                 // faceId = 0 (top face only for entities in bulk render)
     }
 
+    // Apply isometric transformation to camera offset before passing to shader
+    // The shader expects camera offset in isometric space, not world space
+    const c = Math.cos(this.isoAngle);
+    const s = Math.sin(this.isoAngle);
+    const isoCameraX = cameraX * c - cameraY * s;
+    const isoCameraY = (cameraX * s + cameraY * c) * this.isoScale;
+
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
-    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform2f(this.cameraOffsetLoc, isoCameraX, isoCameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -299,11 +306,18 @@ export class GLInstancedRenderer {
     this.instanceData[instanceCount++] = entityHeight;
     this.instanceData[instanceCount++] = 2.0;
 
+    // Apply isometric transformation to camera offset before passing to shader
+    // The shader expects camera offset in isometric space, not world space
+    const c = Math.cos(this.isoAngle);
+    const s = Math.sin(this.isoAngle);
+    const isoCameraX = cameraX * c - cameraY * s;
+    const isoCameraY = (cameraX * s + cameraY * c) * this.isoScale;
+
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
-    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform2f(this.cameraOffsetLoc, isoCameraX, isoCameraY);
     gl.uniform1i(this.renderModeLoc, 1);  // Entity mode
     gl.uniform4f(this.entityColorLoc, 1.0, 0.0, 0.0, 1.0);  // Red color
 
@@ -371,12 +385,19 @@ export class GLInstancedRenderer {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 6));
     }
 
+    // Apply isometric transformation to camera offset before passing to shader
+    // The shader expects camera offset in isometric space, not world space
+    const c = Math.cos(this.isoAngle);
+    const s = Math.sin(this.isoAngle);
+    const isoCameraX = cameraX * c - cameraY * s;
+    const isoCameraY = (cameraX * s + cameraY * c) * this.isoScale;
+
     // Draw single quad for the entire floor
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
-    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform2f(this.cameraOffsetLoc, isoCameraX, isoCameraY);
     gl.uniform1i(this.renderModeLoc, 0);  // Floor mode
 
     gl.activeTexture(gl.TEXTURE0);
