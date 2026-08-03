@@ -27,21 +27,21 @@ void main() {
   vec2 uv;
   
   if (a_faceId == 0.0) {
-    // TOP FACE: lies at y=height, spans width x depth
-    worldPos = vec3(posX + a_quadPos.x * width, posY + height, posY + a_quadPos.y * depth);
+    // TOP FACE: lies at y=height, spans width x depth in XZ plane
+    worldPos = vec3(posX + a_quadPos.x * width, height, posY + a_quadPos.y * depth);
     uv = a_quadPos;
   } else if (a_faceId == 1.0) {
-    // LEFT FACE: vertical face on the left side (spans X and Y)
-    worldPos = vec3(posX + a_quadPos.x * width, posY + a_quadPos.y * height, posY + depth);
+    // LEFT FACE: vertical face on the -X side (spans Z/depth and Y/height)
+    worldPos = vec3(posX, a_quadPos.y * height, posY + a_quadPos.x * depth);
     uv = a_quadPos;
   } else {
-    // RIGHT FACE: vertical face on the right side (spans Z and Y)
-    worldPos = vec3(posX + width, posY + a_quadPos.y * height, posY + a_quadPos.x * depth);
+    // RIGHT FACE: vertical face on the +Z side (spans X/width and Y/height)
+    worldPos = vec3(posX + a_quadPos.x * width, a_quadPos.y * height, posY + depth);
     uv = a_quadPos;
   }
   
-  // Apply camera offset to get screen-relative position (worldPos.xz is already in world space)
-  vec2 screenPos = worldPos.xz;
+  // Apply camera offset to get screen-relative position
+  vec2 screenPos = vec2(worldPos.x, worldPos.z);
   
   // Convert to WebGL clip space [-1, 1]
   // First: subtract camera offset to get camera-relative position
@@ -57,7 +57,7 @@ void main() {
   isoPos.x = centeredPos.x * c - centeredPos.y * s;
   isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
   
-  // Add height offset to Y position for 3D effect (push down based on worldPos.y which is the vertical/Y height)
+  // Add height offset to Y position for 3D effect (push down based on worldPos.y which is the vertical height)
   isoPos.y -= worldPos.y * 0.8;
   
   // Normalize to [-1, 1] clip space
@@ -275,7 +275,7 @@ export class GLInstancedRenderer {
     // Render all 3 faces of the box (top, left, right)
     let instanceCount = 0;
     
-    // Top face (faceId = 0)
+    // Top face (faceId = 0) - positioned at (px, py) with height
     this.instanceData[instanceCount++] = px;
     this.instanceData[instanceCount++] = py;
     this.instanceData[instanceCount++] = boxHeight;
@@ -283,7 +283,7 @@ export class GLInstancedRenderer {
     this.instanceData[instanceCount++] = entityHeight;
     this.instanceData[instanceCount++] = 0.0;
     
-    // Left face (faceId = 1)
+    // Left face (faceId = 1) - same base position
     this.instanceData[instanceCount++] = px;
     this.instanceData[instanceCount++] = py;
     this.instanceData[instanceCount++] = boxHeight;
@@ -291,7 +291,7 @@ export class GLInstancedRenderer {
     this.instanceData[instanceCount++] = entityHeight;
     this.instanceData[instanceCount++] = 1.0;
     
-    // Right face (faceId = 2)
+    // Right face (faceId = 2) - same base position
     this.instanceData[instanceCount++] = px;
     this.instanceData[instanceCount++] = py;
     this.instanceData[instanceCount++] = boxHeight;
@@ -317,7 +317,7 @@ export class GLInstancedRenderer {
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, Math.floor(instanceCount / 6));  // Draw instances
     gl.bindVertexArray(null);
   }
-
+  
   private createShader(type: number, source: string): WebGLShader {
     const gl = this.gl;
     const shader = gl.createShader(type);
