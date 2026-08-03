@@ -26,15 +26,15 @@ void main() {
   
   if (a_faceId == 0.0) {
     // TOP FACE: lies at y=height, spans width x depth
-    worldPos = vec3(a_pos.x + a_quadPos.x * width, a_pos.y + a_pos.z, a_pos.y + a_quadPos.y * depth);
+    worldPos = vec3(a_pos.x + a_quadPos.x * width, a_pos.y + height, a_pos.y + a_quadPos.y * depth);
     uv = a_quadPos;
   } else if (a_faceId == 1.0) {
-    // LEFT FACE: vertical face on the left side
-    worldPos = vec3(a_pos.x + a_quadPos.x * width, a_pos.y + a_pos.z * (1.0 - a_quadPos.y), a_pos.y + depth);
+    // LEFT FACE: vertical face on the left side (spans X and Y)
+    worldPos = vec3(a_pos.x + a_quadPos.x * width, a_pos.y + a_quadPos.y * height, a_pos.y + depth);
     uv = a_quadPos;
   } else {
-    // RIGHT FACE: vertical face on the right side
-    worldPos = vec3(a_pos.x + width, a_pos.y + a_pos.z * (1.0 - a_quadPos.y), a_pos.y + a_quadPos.x * depth);
+    // RIGHT FACE: vertical face on the right side (spans Z and Y)
+    worldPos = vec3(a_pos.x + width, a_pos.y + a_quadPos.y * height, a_pos.y + a_quadPos.x * depth);
     uv = a_quadPos;
   }
   
