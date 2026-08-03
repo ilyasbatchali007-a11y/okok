@@ -221,8 +221,10 @@ export class GLInstancedRenderer {
       const id = dense[i];
       this.instanceData[offset++] = worldAny.px[id];
       this.instanceData[offset++] = worldAny.py[id];
-      this.instanceData[offset++] = worldAny.width[id];
-      this.instanceData[offset++] = worldAny.height[id];
+      this.instanceData[offset++] = worldAny.width[id];  // height (y-dimension of box)
+      this.instanceData[offset++] = worldAny.height[id]; // width (x-dimension of box)
+      this.instanceData[offset++] = 32;                  // depth (z-dimension/box height)
+      this.instanceData[offset++] = 0;                   // faceId = 0 (top face only for entities in bulk render)
     }
 
     gl.useProgram(this.program);
@@ -235,7 +237,7 @@ export class GLInstancedRenderer {
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 4));
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 6));
 
     gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
@@ -375,14 +377,16 @@ export class GLInstancedRenderer {
 
     // Only update floor data if provided (camera moved)
     if (floorData !== null) {
-      // Pack floor data: x, y, width, height
+      // Pack floor data: x, y, height(0 for floor), width, depth, faceId(0 for top)
       this.instanceData[0] = floorData.x;
       this.instanceData[1] = floorData.y;
-      this.instanceData[2] = floorData.width;
-      this.instanceData[3] = floorData.height;
+      this.instanceData[2] = 0;        // height = 0 for floor
+      this.instanceData[3] = floorData.width;
+      this.instanceData[4] = floorData.height;
+      this.instanceData[5] = 0;        // faceId = 0 (top face)
 
       gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 6));
     }
 
     // Draw single quad for the entire floor

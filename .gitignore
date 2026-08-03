@@ -1,1 +1,17 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a TypeScript source file (`src/render/GLInstancedRenderer.ts`), which should not be ignored.
+```
+# Build artifacts
+dist/
+build/
+*.js
+
+# Dependencies
+node_modules/
+
+# Editors
+.vscode/
+
+# Environment
+.env
+.env.local
+*.env.*
+```
