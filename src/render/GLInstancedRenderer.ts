@@ -27,41 +27,41 @@ void main() {
   vec2 uv;
   
   if (a_faceId == 0.0) {
-    // TOP FACE: lies at y=height, spans width x depth
-    worldPos = vec3(posX + a_quadPos.x * width, posY + height, posY + a_quadPos.y * depth);
+    // TOP FACE: lies at y=height, spans width x depth in XZ plane
+    worldPos = vec3(posX + a_quadPos.x * width, height, posY + a_quadPos.y * depth);
     uv = a_quadPos;
   } else if (a_faceId == 1.0) {
-    // LEFT FACE: vertical face on the left side (spans X and Y)
-    worldPos = vec3(posX + a_quadPos.x * width, posY + a_quadPos.y * height, posY + depth);
+    // LEFT FACE: vertical face on the -X side (spans Z/depth and Y/height)
+    worldPos = vec3(posX, a_quadPos.y * height, posY + a_quadPos.x * depth);
     uv = a_quadPos;
   } else {
-    // RIGHT FACE: vertical face on the right side (spans Z and Y)
-    worldPos = vec3(posX + width, posY + a_quadPos.y * height, posY + a_quadPos.x * depth);
+    // RIGHT FACE: vertical face on the +Z side (spans X/width and Y/height)
+    worldPos = vec3(posX + a_quadPos.x * width, a_quadPos.y * height, posY + depth);
     uv = a_quadPos;
   }
   
-  // Apply camera offset to get screen-relative position (worldPos.xz is already in world space)
-  vec2 screenPos = worldPos.xz;
+  // Apply isometric transformation FIRST in world space
+  float c = cos(u_isoAngle);
+  float s = sin(u_isoAngle);
+  vec2 isoWorldPos;
+  isoWorldPos.x = worldPos.x * c - worldPos.z * s;
+  isoWorldPos.y = (worldPos.x * s + worldPos.z * c) * u_isoScale;
+  
+  // Now apply camera offset to get screen-relative position
+  vec2 screenPos = isoWorldPos;
   
   // Convert to WebGL clip space [-1, 1]
-  // First: subtract camera offset to get camera-relative position
+  // Subtract camera offset (which is already in isometric space) to get camera-relative position
   vec2 cameraRelPos = screenPos - u_cameraOffset;
   
   // Center on screen by adding half resolution
   vec2 centeredPos = cameraRelPos + (u_resolution * 0.5);
   
-  // Apply isometric transformation: rotate 45° and scale Y by 0.5
-  float c = cos(u_isoAngle);
-  float s = sin(u_isoAngle);
-  vec2 isoPos;
-  isoPos.x = centeredPos.x * c - centeredPos.y * s;
-  isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
-  
-  // Add height offset to Y position for 3D effect (push down based on worldPos.y which is the vertical/Y height)
-  isoPos.y -= worldPos.y * 0.8;
+  // Add height offset to Y position for 3D effect
+  centeredPos.y -= worldPos.y * 0.8;
   
   // Normalize to [-1, 1] clip space
-  vec2 zeroToOne = isoPos / (u_resolution * 0.5);
+  vec2 zeroToOne = centeredPos / (u_resolution * 0.5);
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
   
@@ -238,11 +238,18 @@ export class GLInstancedRenderer {
       this.instanceData[offset++] = 0.0;                 // faceId = 0 (top face only for entities in bulk render)
     }
 
+    // Apply isometric transformation to camera offset before passing to shader
+    // The shader expects camera offset in isometric space, not world space
+    const c = Math.cos(this.isoAngle);
+    const s = Math.sin(this.isoAngle);
+    const isoCameraX = cameraX * c - cameraY * s;
+    const isoCameraY = (cameraX * s + cameraY * c) * this.isoScale;
+
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
-    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform2f(this.cameraOffsetLoc, isoCameraX, isoCameraY);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -256,7 +263,7 @@ export class GLInstancedRenderer {
   }
   
   /**
-   * Render player entity with red color as a 3D box with dynamic facing
+   * Render player entity as a red 3D box
    */
   public renderPlayer(world: World, width: number, height: number, texture: WebGLTexture,
                       cameraX: number = 0, cameraY: number = 0): void {
@@ -269,19 +276,13 @@ export class GLInstancedRenderer {
     const py = worldAny.y[PLAYER_ID];
     const entityWidth = worldAny.w[PLAYER_ID];
     const entityHeight = worldAny.h[PLAYER_ID];
-    const boxHeight = worldAny.jumpVel ? Math.max(0, 24 + worldAny.jumpVel[PLAYER_ID] * 0.05) : 24; // Visual jump effect
-    const facing = worldAny.facing ? worldAny.facing[PLAYER_ID] : 1; // Default facing right
-    
-    console.log('[RenderPlayer] pos:', px, py, 'size:', entityWidth, entityHeight, 'height:', boxHeight, 'facing:', facing);
-    
-    // Determine which faces to show based on facing direction
-    // 0=up, 1=right, 2=down, 3=left
-    // We'll always show top, but adjust left/right visibility based on facing
+    const boxHeight = 32;  // Fixed height for the 3D box
     
     // Instance layout: [px, py, height, width, depth, faceId]
+    // Render all 3 faces of the box (top, left, right)
     let instanceCount = 0;
     
-    // Always render top face (faceId = 0)
+    // Top face (faceId = 0) - positioned at (px, py) with height
     this.instanceData[instanceCount++] = px;
     this.instanceData[instanceCount++] = py;
     this.instanceData[instanceCount++] = boxHeight;
@@ -289,52 +290,34 @@ export class GLInstancedRenderer {
     this.instanceData[instanceCount++] = entityHeight;
     this.instanceData[instanceCount++] = 0.0;
     
-    // Render side faces based on facing direction
-    // When facing right (1) or down (2), show right face
-    // When facing left (3) or up (0), show left face
-    if (facing === 1 || facing === 2) {
-      // Right face (faceId = 2)
-      this.instanceData[instanceCount++] = px;
-      this.instanceData[instanceCount++] = py;
-      this.instanceData[instanceCount++] = boxHeight;
-      this.instanceData[instanceCount++] = entityWidth;
-      this.instanceData[instanceCount++] = entityHeight;
-      this.instanceData[instanceCount++] = 2.0;
-      
-      // Also show left face when facing down for better 3D effect
-      if (facing === 2) {
-        this.instanceData[instanceCount++] = px;
-        this.instanceData[instanceCount++] = py;
-        this.instanceData[instanceCount++] = boxHeight;
-        this.instanceData[instanceCount++] = entityWidth;
-        this.instanceData[instanceCount++] = entityHeight;
-        this.instanceData[instanceCount++] = 1.0;
-      }
-    } else {
-      // Left face (faceId = 1)
-      this.instanceData[instanceCount++] = px;
-      this.instanceData[instanceCount++] = py;
-      this.instanceData[instanceCount++] = boxHeight;
-      this.instanceData[instanceCount++] = entityWidth;
-      this.instanceData[instanceCount++] = entityHeight;
-      this.instanceData[instanceCount++] = 1.0;
-      
-      // Also show right face when facing up for better 3D effect
-      if (facing === 0) {
-        this.instanceData[instanceCount++] = px;
-        this.instanceData[instanceCount++] = py;
-        this.instanceData[instanceCount++] = boxHeight;
-        this.instanceData[instanceCount++] = entityWidth;
-        this.instanceData[instanceCount++] = entityHeight;
-        this.instanceData[instanceCount++] = 2.0;
-      }
-    }
+    // Left face (faceId = 1) - same base position
+    this.instanceData[instanceCount++] = px;
+    this.instanceData[instanceCount++] = py;
+    this.instanceData[instanceCount++] = boxHeight;
+    this.instanceData[instanceCount++] = entityWidth;
+    this.instanceData[instanceCount++] = entityHeight;
+    this.instanceData[instanceCount++] = 1.0;
+    
+    // Right face (faceId = 2) - same base position
+    this.instanceData[instanceCount++] = px;
+    this.instanceData[instanceCount++] = py;
+    this.instanceData[instanceCount++] = boxHeight;
+    this.instanceData[instanceCount++] = entityWidth;
+    this.instanceData[instanceCount++] = entityHeight;
+    this.instanceData[instanceCount++] = 2.0;
+
+    // Apply isometric transformation to camera offset before passing to shader
+    // The shader expects camera offset in isometric space, not world space
+    const c = Math.cos(this.isoAngle);
+    const s = Math.sin(this.isoAngle);
+    const isoCameraX = cameraX * c - cameraY * s;
+    const isoCameraY = (cameraX * s + cameraY * c) * this.isoScale;
 
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
-    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform2f(this.cameraOffsetLoc, isoCameraX, isoCameraY);
     gl.uniform1i(this.renderModeLoc, 1);  // Entity mode
     gl.uniform4f(this.entityColorLoc, 1.0, 0.0, 0.0, 1.0);  // Red color
 
@@ -348,7 +331,7 @@ export class GLInstancedRenderer {
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, Math.floor(instanceCount / 6));  // Draw instances
     gl.bindVertexArray(null);
   }
-
+  
   private createShader(type: number, source: string): WebGLShader {
     const gl = this.gl;
     const shader = gl.createShader(type);
@@ -402,12 +385,19 @@ export class GLInstancedRenderer {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 6));
     }
 
+    // Apply isometric transformation to camera offset before passing to shader
+    // The shader expects camera offset in isometric space, not world space
+    const c = Math.cos(this.isoAngle);
+    const s = Math.sin(this.isoAngle);
+    const isoCameraX = cameraX * c - cameraY * s;
+    const isoCameraY = (cameraX * s + cameraY * c) * this.isoScale;
+
     // Draw single quad for the entire floor
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
     gl.uniform1f(this.isoAngleLoc, this.isoAngle);
     gl.uniform1f(this.isoScaleLoc, this.isoScale);
-    gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
+    gl.uniform2f(this.cameraOffsetLoc, isoCameraX, isoCameraY);
     gl.uniform1i(this.renderModeLoc, 0);  // Floor mode
 
     gl.activeTexture(gl.TEXTURE0);

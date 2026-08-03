@@ -1,7 +1,7 @@
-// 1. Ensure CELL_SIZE is exported from './config/Constants'
+// 1. Import map data and renderer
 import { generateTestMap, MAP_DATA } from './config/MapData';
 import { MapRenderer } from './render/MapRenderer';
-import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, CELL_SIZE, PLAYER_ID } from './config/Constants';
+import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, PLAYER_ID } from './config/Constants';
 import { World } from './ecs/World';
 // 2. Fixed export/import style for MovementSystem (switched to default or named depending on your file structure)
 import { MovementSystem } from './systems/MovementSystem'; 
@@ -44,13 +44,13 @@ canvas.height = window.innerHeight;
   console.log('[Engine] Map generated, size:', MAP_DATA.length, 'tiles');
   
   // Spawn player entity at center of map (avoiding border walls)
-  const playerX = WORLD_WIDTH / 2;
-  const playerY = WORLD_HEIGHT / 2;
+  const playerX = WORLD_WIDTH / 2 - 16;
+  const playerY = WORLD_HEIGHT / 2 - 16;
   world.active[PLAYER_ID] = 1;
   world.x[PLAYER_ID] = playerX;
   world.y[PLAYER_ID] = playerY;
-  world.w[PLAYER_ID] = 32;
-  world.h[PLAYER_ID] = 32;
+  world.w[PLAYER_ID] = 32;  // width
+  world.h[PLAYER_ID] = 32;  // depth
   world.speed[PLAYER_ID] = 200;
   world.vx[PLAYER_ID] = 0;
   world.vy[PLAYER_ID] = 0;
@@ -69,8 +69,8 @@ canvas.height = window.innerHeight;
     canvas.width,
     canvas.height,
     0.15, // Smooth factor for camera follow
-    -320,   // offsetX (320 pixels left)
-    -100     // offsetY (100 pixels up)
+    -320,   // offsetX - position camera to show more map area
+    -100     // offsetY - adjust vertical framing
   );
   
   // Initialize camera position to player position so map is visible on first frame
@@ -153,7 +153,7 @@ canvas.height = window.innerHeight;
       );
     }
 
-    // 3. Draw Player Entity (red square) on Top
+    // 3. Draw Player Entity (red 3D box) on Top
     renderer.renderPlayer(world, canvas.width, canvas.height, texture, camX, camY);
 
     requestAnimationFrame(loop);
