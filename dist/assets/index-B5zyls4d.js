@@ -1,0 +1,112 @@
+(function(){let e=document.createElement(`link`).relList;if(e&&e.supports&&e.supports(`modulepreload`))return;for(let e of document.querySelectorAll(`link[rel="modulepreload"]`))n(e);new MutationObserver(e=>{for(let t of e)if(t.type===`childList`)for(let e of t.addedNodes)e.tagName===`LINK`&&e.rel===`modulepreload`&&n(e)}).observe(document,{childList:!0,subtree:!0});function t(e){let t={};return e.integrity&&(t.integrity=e.integrity),e.referrerPolicy&&(t.referrerPolicy=e.referrerPolicy),e.crossOrigin===`use-credentials`?t.credentials=`include`:e.crossOrigin===`anonymous`?t.credentials=`omit`:t.credentials=`same-origin`,t}function n(e){if(e.ep)return;e.ep=!0;let n=t(e);fetch(e.href,n)}})();var e=new Uint8Array(1024);function t(){e.fill(0);for(let t=0;t<32;t++)for(let n=0;n<32;n++)(t===0||t===31||n===0||n===31)&&(e[t*32+n]=2)}function n(t,n){return t<0||t>=32||n<0||n>=32||e[n*32+t]===2}var r={width:2048,depth:2048,texturePath:`assets/textures/floor.png`,repeatX:32,repeatZ:32},i=class{constructor(e=r){this.floorConfig=e}getFloorData(e,t,n,r){return{x:0,y:0,width:this.floorConfig.width,height:this.floorConfig.depth,texturePath:this.floorConfig.texturePath,repeatX:this.floorConfig.repeatX,repeatZ:this.floorConfig.repeatZ}}getVisibleTileData(e,t,n,r){return{buffer:new Float32Array,count:0}}},a=65536,o=1/60,s=2048,c=2048,l=class{constructor(e=a){this.maxEntities=e,this.active=new Uint8Array(e),this.x=new Float32Array(e),this.y=new Float32Array(e),this.vx=new Float32Array(e),this.vy=new Float32Array(e),this.w=new Float32Array(e),this.h=new Float32Array(e),this.speed=new Float32Array(e),this.health=new Float32Array(e),this.deadFlag=new Uint8Array(e),this.px=this.x,this.py=this.y,this.width=this.w,this.height=this.h,this.set={count:0,dense:[]}}},u=class{update(e,t,n,r=0){if(!e.active[r])return;let i=0,a=0;(t.w||t.W||t.ArrowUp)&&--a,(t.s||t.S||t.ArrowDown)&&(a+=1),(t.a||t.A||t.ArrowLeft)&&--i,(t.d||t.D||t.ArrowRight)&&(i+=1);let o=Math.hypot(i,a);o>0&&(i/=o,a/=o);let s=e.speed[r]||200,c=i*s,l=a*s;e.vx[r]=c,e.vy[r]=l;let u=this.moveAndSlide(e.x[r],e.y[r],c,l,e.w[r]||32,e.h[r]||32,n);e.x[r]=u.x,e.y[r]=u.y}moveAndSlide(e,t,r,i,a,o,l){let u=e+r*l,d=t+i*l;u=Math.max(0,Math.min(u,s-a)),d=Math.max(0,Math.min(d,c-o));let f=[{x:u+1,y:d+1},{x:u+a-1,y:d+1},{x:u+1,y:d+o-1},{x:u+a-1,y:d+o-1}],p=!1;for(let e of f)if(n(Math.floor(e.x/64),Math.floor(e.y/64))){p=!0;break}if(p){let r=!0,i=[{x:u+1,y:t+1},{x:u+a-1,y:t+1},{x:u+1,y:t+o-1},{x:u+a-1,y:t+o-1}];for(let e of i)if(n(Math.floor(e.x/64),Math.floor(e.y/64))){r=!1;break}if(r)return{x:u,y:t};let s=!0,c=[{x:e+1,y:d+1},{x:e+a-1,y:d+1},{x:e+1,y:d+o-1},{x:e+a-1,y:d+o-1}];for(let e of c)if(n(Math.floor(e.x/64),Math.floor(e.y/64))){s=!1;break}return s?{x:e,y:d}:{x:e,y:t}}return{x:u,y:d}}},d=class{constructor(){this.collisionSystem=new u,this.jumpVelocity=0,this.isGrounded=!0,this.gravity=800,this.jumpStrength=300,this.lastDirection=1}update(e,t,n){let r=e;if(!r.active||!r.active[1])return;let i=0,a=0;(t.w||t.W||t.ArrowUp||t.arrowup)&&--a,(t.s||t.S||t.ArrowDown||t.arrowdown)&&(a+=1),(t.a||t.A||t.ArrowLeft||t.arrowleft)&&--i,(t.d||t.D||t.ArrowRight||t.arrowright)&&(i+=1),(i!==0||a!==0)&&(Math.abs(i)>Math.abs(a)?this.lastDirection=i>0?1:3:this.lastDirection=a>0?2:0);let o=Math.hypot(i,a);o>0&&(i/=o,a/=o),(t[` `]||t.Space)&&this.isGrounded&&(this.jumpVelocity=-this.jumpStrength,this.isGrounded=!1),this.isGrounded?this.jumpVelocity=0:this.jumpVelocity+=this.gravity*n;let s=r.speed?r.speed[1]:200,c=i*s,l=a*s;r.vx&&(r.vx[1]=c),r.vy&&(r.vy[1]=l),r.jumpVel||=new Float32Array(1024),r.facing||=new Int32Array(1024),r.jumpVel[1]=this.jumpVelocity,r.facing[1]=this.lastDirection;let u=r.x?r.x[1]:0,d=r.y?r.y[1]:0,f=r.w?r.w[1]:32,p=r.h?r.h[1]:32,m=this.collisionSystem.moveAndSlide(u,d,c,l,f,p,n);r.x&&(r.x[1]=m.x),r.y&&(r.y[1]=m.y),m.y>=2048-p-1&&(this.isGrounded=!0,this.jumpVelocity=0)}getFacing(){return this.lastDirection}getJumpVelocity(){return this.jumpVelocity}},f=`#version 300 es
+layout(location = 0) in vec2 a_quadPos;   // Unit quad vertex position [0..1]
+layout(location = 1) in vec3 a_pos;       // Entity position (px, py, height)
+layout(location = 2) in vec2 a_size;      // Entity size (width, depth)
+layout(location = 3) in float a_faceId;   // Face identifier: 0=top, 1=left, 2=right
+
+uniform vec2 u_resolution;
+uniform float u_isoAngle;                 // Isometric rotation angle
+uniform float u_isoScale;                 // Y scale for isometric projection (typically 0.5)
+uniform vec2 u_cameraOffset;              // Camera offset for scrolling
+
+out vec2 v_uv;
+out float v_faceId;
+
+void main() {
+  float width = a_size.x;
+  float depth = a_size.y;
+  float height = a_pos.z;
+  float posX = a_pos.x;
+  float posY = a_pos.y;
+  
+  vec3 worldPos;
+  vec2 uv;
+  
+  if (a_faceId == 0.0) {
+    // TOP FACE: lies at y=height, spans width (x) x depth (y in world)
+    worldPos = vec3(posX + a_quadPos.x * width, height, posY + a_quadPos.y * depth);
+    uv = a_quadPos;
+  } else if (a_faceId == 1.0) {
+    // LEFT FACE: vertical face on the left side (spans X and height/Y)
+    worldPos = vec3(posX + a_quadPos.x * width, a_quadPos.y * height, posY + depth);
+    uv = a_quadPos;
+  } else {
+    // RIGHT FACE: vertical face on the right side (spans depth/Y-world and height)
+    worldPos = vec3(posX + width, a_quadPos.y * height, posY + a_quadPos.x * depth);
+    uv = a_quadPos;
+  }
+  
+  // Apply camera offset to get screen-relative position
+  // screenPos.x = world X, screenPos.y = world Y (from worldPos.z which stores the Y coordinate)
+  vec2 screenPos = vec2(worldPos.x, worldPos.z);
+  
+  // Convert to WebGL clip space [-1, 1]
+  // First: subtract camera offset to get camera-relative position
+  vec2 cameraRelPos = screenPos - u_cameraOffset;
+  
+  // Center on screen by adding half resolution
+  vec2 centeredPos = cameraRelPos + (u_resolution * 0.5);
+  
+  // Apply isometric transformation: rotate 45° and scale Y by 0.5
+  float c = cos(u_isoAngle);
+  float s = sin(u_isoAngle);
+  vec2 isoPos;
+  isoPos.x = centeredPos.x * c - centeredPos.y * s;
+  isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
+  
+  // Add height offset to Y position for 3D effect (push down based on box height)
+  isoPos.y -= height * 0.8;
+  
+  // Normalize to [-1, 1] clip space
+  vec2 zeroToOne = isoPos / (u_resolution * 0.5);
+  vec2 zeroToTwo = zeroToOne * 2.0;
+  vec2 clipSpace = zeroToTwo - 1.0;
+  
+  gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);
+  v_uv = uv;
+  v_faceId = a_faceId;
+}
+`,p=`#version 300 es
+precision mediump float;
+
+in vec2 v_uv;
+in float v_faceId;
+uniform sampler2D u_texture;
+uniform int u_renderMode;  // 0 = floor, 1 = entity
+uniform vec4 u_entityColor;
+out vec4 fragColor;
+
+void main() {
+  if (u_renderMode == 1) {
+    // Render as 3D box entity with different shades for each face
+    vec3 baseColor = u_entityColor.rgb;
+    float shade;
+    
+    int faceId = int(v_faceId + 0.5);  // Round to nearest integer
+    
+    if (faceId == 0) {
+      // TOP FACE: brightest
+      shade = 1.0;
+    } else if (faceId == 1) {
+      // LEFT FACE: medium shade
+      shade = 0.7;
+    } else {
+      // RIGHT FACE: darkest
+      shade = 0.5;
+    }
+    
+    fragColor = vec4(baseColor * shade, u_entityColor.a);
+  } else {
+    // Render as green checkered floor pattern
+    float gridX = mod(floor(v_uv.x * 8.0), 2.0);
+    float gridY = mod(floor(v_uv.y * 8.0), 2.0);
+    float checker = mod(gridX + gridY, 2.0);
+    
+    if (checker < 0.5) {
+      fragColor = vec4(0.2, 0.6, 0.2, 1.0);  // Dark green
+    } else {
+      fragColor = vec4(0.3, 0.7, 0.3, 1.0);  // Light green
+    }
+  }
+}
+`,m=class{constructor(e,t){this.isoAngle=Math.PI/4,this.isoScale=.5,this.cameraOffsetX=0,this.cameraOffsetY=0,this.gl=e,this.instanceData=new Float32Array(t*6);let n=this.createShader(e.VERTEX_SHADER,f),r=this.createShader(e.FRAGMENT_SHADER,p);this.program=this.createProgram(n,r),this.resolutionLoc=e.getUniformLocation(this.program,`u_resolution`),this.isoAngleLoc=e.getUniformLocation(this.program,`u_isoAngle`),this.isoScaleLoc=e.getUniformLocation(this.program,`u_isoScale`),this.cameraOffsetLoc=e.getUniformLocation(this.program,`u_cameraOffset`),this.renderModeLoc=e.getUniformLocation(this.program,`u_renderMode`),this.entityColorLoc=e.getUniformLocation(this.program,`u_entityColor`);let i=e.createVertexArray();if(!i)throw Error(`Failed to create VAO`);this.vao=i,e.bindVertexArray(this.vao);let a=new Float32Array([0,0,1,0,0,1,0,1,1,0,1,1]),o=e.createBuffer();e.bindBuffer(e.ARRAY_BUFFER,o),e.bufferData(e.ARRAY_BUFFER,a,e.STATIC_DRAW),e.enableVertexAttribArray(0),e.vertexAttribPointer(0,2,e.FLOAT,!1,0,0);let s=e.createBuffer();if(!s)throw Error(`Failed to create instance buffer`);this.instanceBuffer=s,e.bindBuffer(e.ARRAY_BUFFER,this.instanceBuffer),e.bufferData(e.ARRAY_BUFFER,this.instanceData.byteLength,e.DYNAMIC_DRAW),e.enableVertexAttribArray(1),e.vertexAttribPointer(1,3,e.FLOAT,!1,24,0),e.vertexAttribDivisor(1,1),e.enableVertexAttribArray(2),e.vertexAttribPointer(2,2,e.FLOAT,!1,24,12),e.vertexAttribDivisor(2,1),e.enableVertexAttribArray(3),e.vertexAttribPointer(3,1,e.FLOAT,!1,24,20),e.vertexAttribDivisor(3,1),e.bindVertexArray(null)}setIsometricView(e,t){this.isoAngle=e,this.isoScale=t}render(e,t,n,r,i=0,a=0){let o=this.gl,s=e;if(!s||!s.set)return;let c=s.set.count;if(!c||c===0)return;let l=s.set.dense;if(!l)return;let u=0;for(let e=0;e<c;e++){let t=l[e];this.instanceData[u++]=s.px[t],this.instanceData[u++]=s.py[t],this.instanceData[u++]=s.width[t],this.instanceData[u++]=s.height[t],this.instanceData[u++]=32,this.instanceData[u++]=0}o.useProgram(this.program),o.uniform2f(this.resolutionLoc,t,n),o.uniform1f(this.isoAngleLoc,this.isoAngle),o.uniform1f(this.isoScaleLoc,this.isoScale),o.uniform2f(this.cameraOffsetLoc,i,a),o.activeTexture(o.TEXTURE0),o.bindTexture(o.TEXTURE_2D,r),o.bindBuffer(o.ARRAY_BUFFER,this.instanceBuffer),o.bufferSubData(o.ARRAY_BUFFER,0,this.instanceData.subarray(0,c*6)),o.bindVertexArray(this.vao),o.drawArraysInstanced(o.TRIANGLES,0,6,c),o.bindVertexArray(null)}renderPlayer(e,t,n,r,i=0,a=0){let o=this.gl,s=e;if(!s||!s.active||!s.active[1])return;let c=s.x[1],l=s.y[1],u=s.w[1],d=s.h[1],f=s.jumpVel?Math.max(0,24+s.jumpVel[1]*.05):24,p=s.facing?s.facing[1]:1;console.log(`[RenderPlayer] pos:`,c,l,`size:`,u,d,`height:`,f,`facing:`,p);let m=0;this.instanceData[m++]=c,this.instanceData[m++]=l,this.instanceData[m++]=f,this.instanceData[m++]=u,this.instanceData[m++]=32,this.instanceData[m++]=0,p===1||p===2?(this.instanceData[m++]=c,this.instanceData[m++]=l,this.instanceData[m++]=f,this.instanceData[m++]=u,this.instanceData[m++]=32,this.instanceData[m++]=2,p===2&&(this.instanceData[m++]=c,this.instanceData[m++]=l,this.instanceData[m++]=f,this.instanceData[m++]=u,this.instanceData[m++]=32,this.instanceData[m++]=1)):(this.instanceData[m++]=c,this.instanceData[m++]=l,this.instanceData[m++]=f,this.instanceData[m++]=u,this.instanceData[m++]=32,this.instanceData[m++]=1,p===0&&(this.instanceData[m++]=c,this.instanceData[m++]=l,this.instanceData[m++]=f,this.instanceData[m++]=u,this.instanceData[m++]=32,this.instanceData[m++]=2)),o.useProgram(this.program),o.uniform2f(this.resolutionLoc,t,n),o.uniform1f(this.isoAngleLoc,this.isoAngle),o.uniform1f(this.isoScaleLoc,this.isoScale),o.uniform2f(this.cameraOffsetLoc,i,a),o.uniform1i(this.renderModeLoc,1),o.uniform4f(this.entityColorLoc,1,0,0,1),o.activeTexture(o.TEXTURE0),o.bindTexture(o.TEXTURE_2D,r),o.bindBuffer(o.ARRAY_BUFFER,this.instanceBuffer),o.bufferSubData(o.ARRAY_BUFFER,0,this.instanceData.subarray(0,m)),o.bindVertexArray(this.vao),o.drawArraysInstanced(o.TRIANGLES,0,6,Math.floor(m/6)),o.bindVertexArray(null)}createShader(e,t){let n=this.gl,r=n.createShader(e);if(!r)throw Error(`Failed to create shader`);if(n.shaderSource(r,t),n.compileShader(r),!n.getShaderParameter(r,n.COMPILE_STATUS)){let e=n.getShaderInfoLog(r);throw n.deleteShader(r),Error(`Shader compilation failed: ${e}`)}return r}createProgram(e,t){let n=this.gl,r=n.createProgram();if(!r)throw Error(`Failed to create WebGL program`);if(n.attachShader(r,e),n.attachShader(r,t),n.linkProgram(r),!n.getProgramParameter(r,n.LINK_STATUS)){let e=n.getProgramInfoLog(r);throw n.deleteProgram(r),Error(`Program link failed: ${e}`)}return r}renderFloor(e,t,n,r,i=0,a=0){let o=this.gl;e!==null&&(this.instanceData[0]=e.x,this.instanceData[1]=e.y,this.instanceData[2]=0,this.instanceData[3]=e.width,this.instanceData[4]=e.height,this.instanceData[5]=0,o.bindBuffer(o.ARRAY_BUFFER,this.instanceBuffer),o.bufferSubData(o.ARRAY_BUFFER,0,this.instanceData.subarray(0,6))),o.useProgram(this.program),o.uniform2f(this.resolutionLoc,t,n),o.uniform1f(this.isoAngleLoc,this.isoAngle),o.uniform1f(this.isoScaleLoc,this.isoScale),o.uniform2f(this.cameraOffsetLoc,i,a),o.uniform1i(this.renderModeLoc,0),o.activeTexture(o.TEXTURE0),o.bindTexture(o.TEXTURE_2D,r),o.bindVertexArray(this.vao),o.drawArraysInstanced(o.TRIANGLES,0,6,1),o.bindVertexArray(null)}},h=class e{static async loadTexture(t,n){let r=await e.loadImage(n),i=t.createTexture();if(!i)throw Error(`Failed to create WebGL texture.`);return t.bindTexture(t.TEXTURE_2D,i),t.texImage2D(t.TEXTURE_2D,0,t.RGBA,t.RGBA,t.UNSIGNED_BYTE,r),t.texParameteri(t.TEXTURE_2D,t.TEXTURE_WRAP_S,t.CLAMP_TO_EDGE),t.texParameteri(t.TEXTURE_2D,t.TEXTURE_WRAP_T,t.CLAMP_TO_EDGE),t.texParameteri(t.TEXTURE_2D,t.TEXTURE_MIN_FILTER,t.LINEAR),t.texParameteri(t.TEXTURE_2D,t.TEXTURE_MAG_FILTER,t.LINEAR),i}static loadImage(e){return new Promise((t,n)=>{let r=new Image;r.crossOrigin=`anonymous`,r.onload=()=>t(r),r.onerror=t=>n(Error(`Failed to load image at ${e}: ${t}`)),r.src=e})}},g=8,_=29,v=class{static saveWorld(e){let t=e,n=t.set.count,r=g+n*_,i=new ArrayBuffer(r),a=new DataView(i);a.setUint32(0,n,!0);let o=g,{dense:s}=t.set;for(let e=0;e<n;e++){let n=s[e];a.setFloat32(o+0,t.px[n],!0),a.setFloat32(o+4,t.py[n],!0),a.setFloat32(o+8,t.vx[n],!0),a.setFloat32(o+12,t.vy[n],!0),a.setFloat32(o+16,t.width[n],!0),a.setFloat32(o+20,t.height[n],!0),a.setFloat32(o+24,t.health[n],!0),a.setUint8(o+28,t.deadFlag[n]),o+=_}return i}static loadWorld(e,t){let n=new DataView(t),r=n.getUint32(0,!0),i=e;i.set.count=0;let a=g;for(let e=0;e<r;e++){let e=n.getFloat32(a+0,!0),t=n.getFloat32(a+4,!0),r=n.getFloat32(a+8,!0),o=n.getFloat32(a+12,!0),s=n.getFloat32(a+16,!0),c=n.getFloat32(a+20,!0),l=n.getFloat32(a+24,!0),u=n.getUint8(a+28),d=i.addEntity(e,t,s,c,l);i.vx[d]=r,i.vy[d]=o,i.deadFlag[d]=u,a+=_}}};function y(e,t,n){return e+(t-e)*n}function b(e,t,n){return e<t?t:e>n?n:e}var x=class{constructor(){this.x=0,this.y=0,this.zoom=1,this.rotation=0,this.target=null,this.smoothFactor=.1,this.lambda=-Math.log(.9),this.EPSILON=.01,this.offsetX=0,this.offsetY=0,this.viewportWidth=800,this.viewportHeight=600,this.mapWidth=s,this.mapHeight=c,this.isHalfWidth=64/2,this.isHalfHeight=64/4,this.viewProjectionMatrix=new Float32Array(16),this.viewMatrix=new Float32Array(16),this.projectionMatrix=new Float32Array(16),this.isMatrixDirty=!0}setTarget(e){this.target=e}setOffset(e,t){this.offsetX=e,this.offsetY=t,this.isMatrixDirty=!0}getOffset(){return{offsetX:this.offsetX,offsetY:this.offsetY}}clearTarget(){this.target=null}setSmoothFactor(e){this.smoothFactor=b(e,.01,1),this.lambda=-Math.log(1-this.smoothFactor)}getSmoothFactor(){return this.smoothFactor}setViewport(e,t){this.viewportWidth=e,this.viewportHeight=t,this.isMatrixDirty=!0}setMapBounds(e,t){this.mapWidth=e,this.mapHeight=t,this.isMatrixDirty=!0}update(e=1){if(!this.target)return!1;let t=this.target.x-this.viewportWidth/2+this.offsetX,n=this.target.y-this.viewportHeight/2+this.offsetY,r=t-this.x,i=n-this.y;if(Math.abs(r)<this.EPSILON&&Math.abs(i)<this.EPSILON)return this.x=t,this.y=n,this.isMatrixDirty=!1,!1;let a=1-Math.exp(-this.lambda*e);return this.x=y(this.x,t,a),this.y=y(this.y,n,a),this.isMatrixDirty=!0,!0}snapTo(e,t){this.x=e,this.y=t,this.isMatrixDirty=!0}snapToTarget(){this.target&&(this.x=this.target.x-this.viewportWidth/2+this.offsetX,this.y=this.target.y-this.viewportHeight/2+this.offsetY,this.isMatrixDirty=!0)}clampToBounds(){let e=Math.min(0,this.offsetX),t=Math.min(0,this.offsetY),n=Math.max(0,this.mapWidth-this.viewportWidth)+Math.max(0,this.offsetX),r=Math.max(0,this.mapHeight-this.viewportHeight)+Math.max(0,this.offsetY);this.x=b(this.x,e,n),this.y=b(this.y,t,r)}move(e,t){this.x+=e,this.y+=t,this.isMatrixDirty=!0}setZoom(e){this.zoom=b(e,.5,3),this.isMatrixDirty=!0}getZoom(){return this.zoom}setRotation(e){this.rotation=e}getX(){return this.x}getY(){return this.y}getState(){return{x:this.x,y:this.y,zoom:this.zoom,rotation:this.rotation}}worldToScreen(e,t,n){let r=n||{x:0,y:0};return r.x=e-this.x,r.y=t-this.y,r}screenToWorld(e,t,n){let r=n||{x:0,y:0};return r.x=e+this.x,r.y=t+this.y,r}tileToScreen(e,t){e*64,t*64;let n=(e-t)*this.isHalfWidth,r=(e+t)*this.isHalfHeight;return{x:n-this.x+this.viewportWidth/2,y:r-this.y+100}}isVisible(e,t,n=0){return e>=this.x-n&&e<=this.x+this.viewportWidth+n&&t>=this.y-n&&t<=this.y+this.viewportHeight+n}isTileVisible(e,t){let n=e*64,r=t*64;return this.isVisible(n,r,64)}getViewProjectionMatrix(){if(!this.isMatrixDirty)return this.viewProjectionMatrix;let e=this.x,t=this.x+this.viewportWidth,n=this.y,r=this.y+this.viewportHeight,i=1/(e-t),a=1/(r-n);return this.viewProjectionMatrix[0]=2*i,this.viewProjectionMatrix[1]=0,this.viewProjectionMatrix[2]=0,this.viewProjectionMatrix[3]=0,this.viewProjectionMatrix[4]=0,this.viewProjectionMatrix[5]=2*a,this.viewProjectionMatrix[6]=0,this.viewProjectionMatrix[7]=0,this.viewProjectionMatrix[8]=0,this.viewProjectionMatrix[9]=0,this.viewProjectionMatrix[10]=-1,this.viewProjectionMatrix[11]=0,this.viewProjectionMatrix[12]=(t+e)*i,this.viewProjectionMatrix[13]=(n+r)*a,this.viewProjectionMatrix[14]=0,this.viewProjectionMatrix[15]=1,this.isMatrixDirty=!1,this.viewProjectionMatrix}getViewMatrix(){return this.isMatrixDirty?(this.viewMatrix[0]=1,this.viewMatrix[1]=0,this.viewMatrix[2]=0,this.viewMatrix[3]=0,this.viewMatrix[4]=0,this.viewMatrix[5]=1,this.viewMatrix[6]=0,this.viewMatrix[7]=0,this.viewMatrix[8]=0,this.viewMatrix[9]=0,this.viewMatrix[10]=1,this.viewMatrix[11]=0,this.viewMatrix[12]=-this.x,this.viewMatrix[13]=-this.y,this.viewMatrix[14]=0,this.viewMatrix[15]=1,this.isMatrixDirty=!1,this.viewMatrix):this.viewMatrix}getProjectionMatrix(){if(!this.isMatrixDirty)return this.projectionMatrix;let e=this.viewportWidth,t=this.viewportHeight,n=1/(0-e),r=1/(t-0);return this.projectionMatrix[0]=2*n,this.projectionMatrix[1]=0,this.projectionMatrix[2]=0,this.projectionMatrix[3]=0,this.projectionMatrix[4]=0,this.projectionMatrix[5]=2*r,this.projectionMatrix[6]=0,this.projectionMatrix[7]=0,this.projectionMatrix[8]=0,this.projectionMatrix[9]=0,this.projectionMatrix[10]=-1,this.projectionMatrix[11]=0,this.projectionMatrix[12]=(e+0)*n,this.projectionMatrix[13]=(0+t)*r,this.projectionMatrix[14]=0,this.projectionMatrix[15]=1,this.isMatrixDirty=!1,this.projectionMatrix}getFrustumBounds(e=0){return{minX:this.x-e,minY:this.y-e,maxX:this.x+this.viewportWidth+e,maxY:this.y+this.viewportHeight+e}}getVisibleTileRange(){let e=this.getFrustumBounds(128);return{minCol:Math.max(0,Math.floor(e.minX/64)),minRow:Math.max(0,Math.floor(e.minY/64)),maxCol:Math.min(Math.ceil(this.mapWidth/64),Math.ceil(e.maxX/64)),maxRow:Math.min(Math.ceil(this.mapHeight/64),Math.ceil(e.maxY/64))}}};function S(e,t,n,r=.1,i=0,a=0){let o=new x;return o.setTarget(e),o.setViewport(t,n),o.setSmoothFactor(r),o.setOffset(i,a),o}var C=new i;async function w(){let n=document.getElementById(`canvas`);if(!n)throw Error(`Canvas not found`);n.width=window.innerWidth,n.height=window.innerHeight;let r=n.getContext(`webgl2`);if(!r)throw Error(`WebGL 2 is not supported.`);let i=r;i.viewport(0,0,n.width,n.height),i.clearColor(.1,.1,.12,1);let f=new l,p=new d,g=new u,_=new m(i,a);t(),console.log(`[Engine] Map generated, size:`,e.length,`tiles`);let y=s/2,b=c/2;f.active[1]=1,f.x[1]=y,f.y[1]=b,f.w[1]=32,f.h[1]=32,f.speed[1]=200,f.vx[1]=0,f.vy[1]=0,f.set.count=1,f.set.dense[0]=1,_.setIsometricView(Math.PI/4,.5);let x=S({x:f.x[1],y:f.y[1]},n.width,n.height,.15,-320,-100);x.snapToTarget();let w=await h.loadTexture(i,`data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==`),T={};window.addEventListener(`keydown`,e=>{T[e.key]=!0}),window.addEventListener(`keyup`,e=>{T[e.key]=!1});let E=0,D=performance.now();function O(e){let t=(e-D)/1e3;D=e,E+=Math.min(t,.25),x.setTarget({x:f.x[1],y:f.y[1]});let r=x.update(t*60);for(;E>=o;)p.update(f,T,o),g.update(f,T,o),E-=o;i.clear(i.COLOR_BUFFER_BIT);let a=x.getX(),s=x.getY();if(r||D===e){let e=C.getFloorData(a,s,n.width,n.height);_.renderFloor(e,n.width,n.height,w,a,s)}else _.renderFloor(null,n.width,n.height,w,a,s);_.renderPlayer(f,n.width,n.height,w,a,s),requestAnimationFrame(O)}let k=null;window.addEventListener(`keydown`,e=>{e.key===`s`||e.key===`S`?(k=v.saveWorld(f),console.log(`[Engine] World saved! Binary size: ${k.byteLength} bytes`)):(e.key===`l`||e.key===`L`)&&(k?(v.loadWorld(f,k),console.log(`[Engine] World state restored from binary buffer!`)):console.warn(`[Engine] No save data found! Press S to save first.`))}),window.addEventListener(`resize`,()=>{n.width=window.innerWidth,n.height=window.innerHeight,i.viewport(0,0,n.width,n.height),x.setViewport(n.width,n.height)}),requestAnimationFrame(O)}w().catch(console.error);

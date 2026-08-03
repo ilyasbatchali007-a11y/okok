@@ -25,23 +25,33 @@ void main() {
   
   vec3 worldPos;
   vec2 uv;
+  float baseHeightOffset = 0.0; // Height offset for this vertex
   
   if (a_faceId == 0.0) {
-    // TOP FACE: lies at y=height, spans width x depth
-    worldPos = vec3(posX + a_quadPos.x * width, posY + height, posY + a_quadPos.y * depth);
+    // TOP FACE: lies at vertical position = height, spans width (x) x depth (y in world)
+    // Base position is (posX, posY), top face is elevated by 'height'
+    worldPos = vec3(posX + a_quadPos.x * width, posY + a_quadPos.y * depth, height);
     uv = a_quadPos;
+    baseHeightOffset = height;
   } else if (a_faceId == 1.0) {
-    // LEFT FACE: vertical face on the left side (spans X and Y)
-    worldPos = vec3(posX + a_quadPos.x * width, posY + a_quadPos.y * height, posY + depth);
+    // LEFT FACE: vertical face spanning X dimension and vertical height
+    // Base Y position is posY + depth (back edge), spans from 0 to height vertically
+    worldPos = vec3(posX + a_quadPos.x * width, posY + depth, a_quadPos.y * height);
     uv = a_quadPos;
+    baseHeightOffset = a_quadPos.y * height;
   } else {
-    // RIGHT FACE: vertical face on the right side (spans Z and Y)
-    worldPos = vec3(posX + width, posY + a_quadPos.y * height, posY + a_quadPos.x * depth);
+    // RIGHT FACE: vertical face spanning depth (Y-world) dimension and vertical height
+    // Base X position is posX + width (right edge), spans from 0 to height vertically
+    worldPos = vec3(posX + width, posY + a_quadPos.x * depth, a_quadPos.y * height);
     uv = a_quadPos;
+    baseHeightOffset = a_quadPos.y * height;
   }
   
-  // Apply camera offset to get screen-relative position (worldPos.xz is already in world space)
-  vec2 screenPos = worldPos.xz;
+  // Apply camera offset to get screen-relative position
+  // screenPos.x = world X, screenPos.y = world Y (stored in worldPos.y)
+  // worldPos.z contains the vertical height for isometric projection
+  vec2 screenPos = vec2(worldPos.x, worldPos.y);
+  float vertHeight = worldPos.z;
   
   // Convert to WebGL clip space [-1, 1]
   // First: subtract camera offset to get camera-relative position
@@ -57,8 +67,8 @@ void main() {
   isoPos.x = centeredPos.x * c - centeredPos.y * s;
   isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
   
-  // Add height offset to Y position for 3D effect (push down based on worldPos.y which is the vertical/Y height)
-  isoPos.y -= worldPos.y * 0.8;
+  // Add height offset to Y position for 3D effect (push down based on vertex height)
+  isoPos.y -= vertHeight * 0.8;
   
   // Normalize to [-1, 1] clip space
   vec2 zeroToOne = isoPos / (u_resolution * 0.5);
@@ -284,9 +294,9 @@ export class GLInstancedRenderer {
     // Always render top face (faceId = 0)
     this.instanceData[instanceCount++] = px;
     this.instanceData[instanceCount++] = py;
-    this.instanceData[instanceCount++] = boxHeight;
-    this.instanceData[instanceCount++] = entityWidth;
-    this.instanceData[instanceCount++] = entityHeight;
+    this.instanceData[instanceCount++] = boxHeight;  // height (vertical dimension)
+    this.instanceData[instanceCount++] = entityWidth; // width (x-dimension)
+    this.instanceData[instanceCount++] = 32;          // depth (z-dimension, fixed for box shape)
     this.instanceData[instanceCount++] = 0.0;
     
     // Render side faces based on facing direction
@@ -298,7 +308,7 @@ export class GLInstancedRenderer {
       this.instanceData[instanceCount++] = py;
       this.instanceData[instanceCount++] = boxHeight;
       this.instanceData[instanceCount++] = entityWidth;
-      this.instanceData[instanceCount++] = entityHeight;
+      this.instanceData[instanceCount++] = 32;
       this.instanceData[instanceCount++] = 2.0;
       
       // Also show left face when facing down for better 3D effect
@@ -307,7 +317,7 @@ export class GLInstancedRenderer {
         this.instanceData[instanceCount++] = py;
         this.instanceData[instanceCount++] = boxHeight;
         this.instanceData[instanceCount++] = entityWidth;
-        this.instanceData[instanceCount++] = entityHeight;
+        this.instanceData[instanceCount++] = 32;
         this.instanceData[instanceCount++] = 1.0;
       }
     } else {
@@ -316,7 +326,7 @@ export class GLInstancedRenderer {
       this.instanceData[instanceCount++] = py;
       this.instanceData[instanceCount++] = boxHeight;
       this.instanceData[instanceCount++] = entityWidth;
-      this.instanceData[instanceCount++] = entityHeight;
+      this.instanceData[instanceCount++] = 32;
       this.instanceData[instanceCount++] = 1.0;
       
       // Also show right face when facing up for better 3D effect
@@ -325,7 +335,7 @@ export class GLInstancedRenderer {
         this.instanceData[instanceCount++] = py;
         this.instanceData[instanceCount++] = boxHeight;
         this.instanceData[instanceCount++] = entityWidth;
-        this.instanceData[instanceCount++] = entityHeight;
+        this.instanceData[instanceCount++] = 32;
         this.instanceData[instanceCount++] = 2.0;
       }
     }
