@@ -131,12 +131,8 @@ export class Camera {
     let targetX = this.target.x - this.viewportWidth / 2 + this.offsetX;
     let targetY = this.target.y - this.viewportHeight / 2 + this.offsetY;
 
-    // Clamp target to map bounds BEFORE interpolation
-    // This prevents overshooting and vibration against boundaries
-    const maxX = Math.max(0, this.mapWidth - this.viewportWidth);
-    const maxY = Math.max(0, this.mapHeight - this.viewportHeight);
-    targetX = Math.max(0, Math.min(maxX, targetX));
-    targetY = Math.max(0, Math.min(maxY, targetY));
+    // No clamping - allow camera to show void beyond map borders
+    // This ensures the camera always follows the player regardless of position
 
     // Check if already within epsilon threshold of target
     const dx = targetX - this.x;
@@ -154,7 +150,7 @@ export class Camera {
     // Formula: factor = 1 - e^(-lambda * dt)
     const factor = 1 - Math.exp(-this.lambda * deltaTime);
     
-    // Apply interpolation to pre-clamped targets
+    // Apply interpolation
     this.x = lerp(this.x, targetX, factor);
     this.y = lerp(this.y, targetY, factor);
     
@@ -169,7 +165,7 @@ export class Camera {
   public snapTo(x: number, y: number): void {
     this.x = x;
     this.y = y;
-    this.clampToBounds();
+    // No clamping - allow camera to show void beyond map borders
     this.isMatrixDirty = true;
   }
 
@@ -181,7 +177,7 @@ export class Camera {
     
     this.x = this.target.x - this.viewportWidth / 2 + this.offsetX;
     this.y = this.target.y - this.viewportHeight / 2 + this.offsetY;
-    this.clampToBounds();
+    // No clamping - allow camera to show void beyond map borders
     this.isMatrixDirty = true;
   }
 
@@ -190,12 +186,15 @@ export class Camera {
    */
   private clampToBounds(): void {
     // Calculate maximum scroll positions
-    const maxX = Math.max(0, this.mapWidth - this.viewportWidth);
-    const maxY = Math.max(0, this.mapHeight - this.viewportHeight);
+    // Account for offset in the clamping bounds
+    const minX = Math.min(0, this.offsetX);
+    const minY = Math.min(0, this.offsetY);
+    const maxX = Math.max(0, this.mapWidth - this.viewportWidth) + Math.max(0, this.offsetX);
+    const maxY = Math.max(0, this.mapHeight - this.viewportHeight) + Math.max(0, this.offsetY);
 
     // Clamp camera position
-    this.x = clamp(this.x, 0, maxX);
-    this.y = clamp(this.y, 0, maxY);
+    this.x = clamp(this.x, minX, maxX);
+    this.y = clamp(this.y, minY, maxY);
   }
 
   /**
@@ -204,7 +203,7 @@ export class Camera {
   public move(dx: number, dy: number): void {
     this.x += dx;
     this.y += dy;
-    this.clampToBounds();
+    // No clamping - allow camera to show void beyond map borders
     this.isMatrixDirty = true;
   }
 

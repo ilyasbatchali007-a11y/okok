@@ -1,28 +1,54 @@
 import { World } from '../ecs/World';
 import { PLAYER_ID } from '../config/Constants';
 
-// Vertex Shader Source - simplified isometric transformation
+// Vertex Shader Source - 3D box with isometric transformation
 const VS_SOURCE = `#version 300 es
-layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
-layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
-layout(location = 2) in vec2 a_size;    // Entity size (width, height)
+layout(location = 0) in vec2 a_quadPos;   // Unit quad vertex position [0..1]
+layout(location = 1) in vec3 a_pos;       // Entity position (px, py, height)
+layout(location = 2) in vec2 a_size;      // Entity size (width, depth)
+layout(location = 3) in float a_faceId;   // Face identifier: 0=top, 1=left, 2=right
 
 uniform vec2 u_resolution;
-uniform float u_isoAngle;               // Isometric rotation angle
-uniform float u_isoScale;               // Y scale for isometric projection (typically 0.5)
-uniform vec2 u_cameraOffset;            // Camera offset for scrolling
+uniform float u_isoAngle;                 // Isometric rotation angle
+uniform float u_isoScale;                 // Y scale for isometric projection (typically 0.5)
+uniform vec2 u_cameraOffset;              // Camera offset for scrolling
 
 out vec2 v_uv;
+out float v_faceId;
 
 void main() {
-  // Calculate world position from instance data
-  vec2 worldPos = a_pos + (a_quadPos * a_size);
+  float width = a_size.x;
+  float depth = a_size.y;
+  float height = a_pos.z;
+  float posX = a_pos.x;
+  float posY = a_pos.y;
   
-  // Apply camera offset to get screen-relative position
-  vec2 screenPos = worldPos - u_cameraOffset;
+  vec3 worldPos;
+  vec2 uv;
   
-  // Center on screen
-  vec2 centeredPos = screenPos - (u_resolution * 0.5);
+  if (a_faceId == 0.0) {
+    // TOP FACE: lies at y=height, spans width x depth
+    worldPos = vec3(posX + a_quadPos.x * width, posY + height, posY + a_quadPos.y * depth);
+    uv = a_quadPos;
+  } else if (a_faceId == 1.0) {
+    // LEFT FACE: vertical face on the left side (spans X and Y)
+    worldPos = vec3(posX + a_quadPos.x * width, posY + a_quadPos.y * height, posY + depth);
+    uv = a_quadPos;
+  } else {
+    // RIGHT FACE: vertical face on the right side (spans Z and Y)
+    worldPos = vec3(posX + width, posY + a_quadPos.y * height, posY + a_quadPos.x * depth);
+    uv = a_quadPos;
+  }
+  
+  // Apply camera offset to get screen-relative position (worldPos.xz is already in world space)
+  vec2 screenPos = worldPos.xz;
+  
+  // Convert to WebGL clip space [-1, 1]
+  // First: subtract camera offset to get camera-relative position
+  vec2 cameraRelPos = screenPos - u_cameraOffset;
+  
+  // Center on screen by adding half resolution
+  vec2 centeredPos = cameraRelPos + (u_resolution * 0.5);
   
   // Apply isometric transformation: rotate 45° and scale Y by 0.5
   float c = cos(u_isoAngle);
@@ -31,21 +57,26 @@ void main() {
   isoPos.x = centeredPos.x * c - centeredPos.y * s;
   isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
   
-  // Convert to WebGL clip space [-1, 1]
+  // Add height offset to Y position for 3D effect (push down based on worldPos.y which is the vertical/Y height)
+  isoPos.y -= worldPos.y * 0.8;
+  
+  // Normalize to [-1, 1] clip space
   vec2 zeroToOne = isoPos / (u_resolution * 0.5);
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
   
   gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);
-  v_uv = a_quadPos;
+  v_uv = uv;
+  v_faceId = a_faceId;
 }
 `;
 
-// Fragment Shader Source - supports both floor and entity colors
+// Fragment Shader Source - supports both floor and entity colors with 3D box shading
 const FS_SOURCE = `#version 300 es
 precision mediump float;
 
 in vec2 v_uv;
+in float v_faceId;
 uniform sampler2D u_texture;
 uniform int u_renderMode;  // 0 = floor, 1 = entity
 uniform vec4 u_entityColor;
@@ -53,8 +84,24 @@ out vec4 fragColor;
 
 void main() {
   if (u_renderMode == 1) {
-    // Render as solid red entity
-    fragColor = u_entityColor;
+    // Render as 3D box entity with different shades for each face
+    vec3 baseColor = u_entityColor.rgb;
+    float shade;
+    
+    int faceId = int(v_faceId + 0.5);  // Round to nearest integer
+    
+    if (faceId == 0) {
+      // TOP FACE: brightest
+      shade = 1.0;
+    } else if (faceId == 1) {
+      // LEFT FACE: medium shade
+      shade = 0.7;
+    } else {
+      // RIGHT FACE: darkest
+      shade = 0.5;
+    }
+    
+    fragColor = vec4(baseColor * shade, u_entityColor.a);
   } else {
     // Render as green checkered floor pattern
     float gridX = mod(floor(v_uv.x * 8.0), 2.0);
@@ -92,8 +139,9 @@ export class GLInstancedRenderer {
 
   constructor(gl: WebGL2RenderingContext, maxEntities: number) {
     this.gl = gl;
-    // 4 floats per instance: px, py, width, height
-    this.instanceData = new Float32Array(maxEntities * 4);
+    // For 3D box: 5 floats per instance (px, py, height, width, depth) + 1 int for faceId
+    // We'll use a larger buffer to accommodate the extra data
+    this.instanceData = new Float32Array(maxEntities * 6);
 
     const vs = this.createShader(gl.VERTEX_SHADER, VS_SOURCE);
     const fs = this.createShader(gl.FRAGMENT_SHADER, FS_SOURCE);
@@ -128,7 +176,7 @@ export class GLInstancedRenderer {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-    // 2. Dynamic Instance Buffer (pos & size)
+    // 2. Dynamic Instance Buffer (pos, height, size, faceId)
     const instBuffer = gl.createBuffer();
     if (!instBuffer) throw new Error('Failed to create instance buffer');
     this.instanceBuffer = instBuffer;
@@ -136,15 +184,23 @@ export class GLInstancedRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.instanceData.byteLength, gl.DYNAMIC_DRAW);
 
-    // Attribute 1: Position (px, py)
+    // Attribute 1: Position (px, py, height) - location 1
+    // Stride is 6 floats * 4 bytes = 24 bytes
     gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 0);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 0);
     gl.vertexAttribDivisor(1, 1);
 
-    // Attribute 2: Size (width, height)
+    // Attribute 2: Size (width, depth) - location 2
     gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 16, 8);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 24, 12);
     gl.vertexAttribDivisor(2, 1);
+
+    // Attribute 3: Face ID (int) - location 3
+    // Face ID is stored as float in the buffer, read as float and converted to int in shader
+    // Offset: 5 floats * 4 bytes = 20 bytes
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 24, 20);
+    gl.vertexAttribDivisor(3, 1);
 
     gl.bindVertexArray(null);
   }
@@ -176,8 +232,10 @@ export class GLInstancedRenderer {
       const id = dense[i];
       this.instanceData[offset++] = worldAny.px[id];
       this.instanceData[offset++] = worldAny.py[id];
-      this.instanceData[offset++] = worldAny.width[id];
-      this.instanceData[offset++] = worldAny.height[id];
+      this.instanceData[offset++] = worldAny.width[id];  // height (y-dimension of box)
+      this.instanceData[offset++] = worldAny.height[id]; // width (x-dimension of box)
+      this.instanceData[offset++] = 32;                  // depth (z-dimension/box height)
+      this.instanceData[offset++] = 0.0;                 // faceId = 0 (top face only for entities in bulk render)
     }
 
     gl.useProgram(this.program);
@@ -190,7 +248,7 @@ export class GLInstancedRenderer {
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 4));
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, count * 6));
 
     gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
@@ -198,7 +256,7 @@ export class GLInstancedRenderer {
   }
   
   /**
-   * Render player entity with red color
+   * Render player entity with red color as a 3D box with dynamic facing
    */
   public renderPlayer(world: World, width: number, height: number, texture: WebGLTexture,
                       cameraX: number = 0, cameraY: number = 0): void {
@@ -207,11 +265,70 @@ export class GLInstancedRenderer {
     
     if (!worldAny || !worldAny.active || !worldAny.active[PLAYER_ID]) return;
     
-    // Pack single player entity
-    this.instanceData[0] = worldAny.px[PLAYER_ID];
-    this.instanceData[1] = worldAny.py[PLAYER_ID];
-    this.instanceData[2] = worldAny.width[PLAYER_ID];
-    this.instanceData[3] = worldAny.height[PLAYER_ID];
+    const px = worldAny.x[PLAYER_ID];
+    const py = worldAny.y[PLAYER_ID];
+    const entityWidth = worldAny.w[PLAYER_ID];
+    const entityHeight = worldAny.h[PLAYER_ID];
+    const boxHeight = worldAny.jumpVel ? Math.max(0, 24 + worldAny.jumpVel[PLAYER_ID] * 0.05) : 24; // Visual jump effect
+    const facing = worldAny.facing ? worldAny.facing[PLAYER_ID] : 1; // Default facing right
+    
+    console.log('[RenderPlayer] pos:', px, py, 'size:', entityWidth, entityHeight, 'height:', boxHeight, 'facing:', facing);
+    
+    // Determine which faces to show based on facing direction
+    // 0=up, 1=right, 2=down, 3=left
+    // We'll always show top, but adjust left/right visibility based on facing
+    
+    // Instance layout: [px, py, height, width, depth, faceId]
+    let instanceCount = 0;
+    
+    // Always render top face (faceId = 0)
+    this.instanceData[instanceCount++] = px;
+    this.instanceData[instanceCount++] = py;
+    this.instanceData[instanceCount++] = boxHeight;
+    this.instanceData[instanceCount++] = entityWidth;
+    this.instanceData[instanceCount++] = entityHeight;
+    this.instanceData[instanceCount++] = 0.0;
+    
+    // Render side faces based on facing direction
+    // When facing right (1) or down (2), show right face
+    // When facing left (3) or up (0), show left face
+    if (facing === 1 || facing === 2) {
+      // Right face (faceId = 2)
+      this.instanceData[instanceCount++] = px;
+      this.instanceData[instanceCount++] = py;
+      this.instanceData[instanceCount++] = boxHeight;
+      this.instanceData[instanceCount++] = entityWidth;
+      this.instanceData[instanceCount++] = entityHeight;
+      this.instanceData[instanceCount++] = 2.0;
+      
+      // Also show left face when facing down for better 3D effect
+      if (facing === 2) {
+        this.instanceData[instanceCount++] = px;
+        this.instanceData[instanceCount++] = py;
+        this.instanceData[instanceCount++] = boxHeight;
+        this.instanceData[instanceCount++] = entityWidth;
+        this.instanceData[instanceCount++] = entityHeight;
+        this.instanceData[instanceCount++] = 1.0;
+      }
+    } else {
+      // Left face (faceId = 1)
+      this.instanceData[instanceCount++] = px;
+      this.instanceData[instanceCount++] = py;
+      this.instanceData[instanceCount++] = boxHeight;
+      this.instanceData[instanceCount++] = entityWidth;
+      this.instanceData[instanceCount++] = entityHeight;
+      this.instanceData[instanceCount++] = 1.0;
+      
+      // Also show right face when facing up for better 3D effect
+      if (facing === 0) {
+        this.instanceData[instanceCount++] = px;
+        this.instanceData[instanceCount++] = py;
+        this.instanceData[instanceCount++] = boxHeight;
+        this.instanceData[instanceCount++] = entityWidth;
+        this.instanceData[instanceCount++] = entityHeight;
+        this.instanceData[instanceCount++] = 2.0;
+      }
+    }
 
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
@@ -225,10 +342,10 @@ export class GLInstancedRenderer {
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, instanceCount));
 
     gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, Math.floor(instanceCount / 6));  // Draw instances
     gl.bindVertexArray(null);
   }
 
@@ -273,14 +390,16 @@ export class GLInstancedRenderer {
 
     // Only update floor data if provided (camera moved)
     if (floorData !== null) {
-      // Pack floor data: x, y, width, height
+      // Floor data: x, y, height(0 for floor), width, depth, faceId(0 for top)
       this.instanceData[0] = floorData.x;
       this.instanceData[1] = floorData.y;
-      this.instanceData[2] = floorData.width;
-      this.instanceData[3] = floorData.height;
+      this.instanceData[2] = 0.0;     // height = 0 for floor
+      this.instanceData[3] = floorData.width;
+      this.instanceData[4] = floorData.height;
+      this.instanceData[5] = 0.0;     // faceId = 0 (top face)
 
       gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 6));
     }
 
     // Draw single quad for the entire floor
