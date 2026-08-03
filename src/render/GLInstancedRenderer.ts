@@ -191,7 +191,7 @@ export class GLInstancedRenderer {
     // Face ID is stored as float in the buffer but cast to int in shader
     // Offset: 5 floats * 4 bytes = 20 bytes
     gl.enableVertexAttribArray(3);
-    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 24, 20);
+    gl.vertexAttribIPointer(3, 1, gl.INT, 24, 20);
     gl.vertexAttribDivisor(3, 1);
 
     gl.bindVertexArray(null);
@@ -227,7 +227,7 @@ export class GLInstancedRenderer {
       this.instanceData[offset++] = worldAny.width[id];  // height (y-dimension of box)
       this.instanceData[offset++] = worldAny.height[id]; // width (x-dimension of box)
       this.instanceData[offset++] = 32;                  // depth (z-dimension/box height)
-      this.instanceData[offset++] = 0;                   // faceId = 0 (top face only for entities in bulk render)
+      this.instanceData[offset++] = 0.0;                 // faceId = 0 (top face only for entities in bulk render)
     }
 
     gl.useProgram(this.program);
@@ -277,7 +277,7 @@ export class GLInstancedRenderer {
     this.instanceData[instanceCount++] = boxHeight;
     this.instanceData[instanceCount++] = entityWidth;
     this.instanceData[instanceCount++] = entityHeight;
-    this.instanceData[instanceCount++] = 0;
+    this.instanceData[instanceCount++] = 0.0;
     
     // Render side faces based on facing direction
     // When facing right (1) or down (2), show right face
@@ -289,7 +289,7 @@ export class GLInstancedRenderer {
       this.instanceData[instanceCount++] = boxHeight;
       this.instanceData[instanceCount++] = entityWidth;
       this.instanceData[instanceCount++] = entityHeight;
-      this.instanceData[instanceCount++] = 2;
+      this.instanceData[instanceCount++] = 2.0;
       
       // Also show left face when facing down for better 3D effect
       if (facing === 2) {
@@ -298,7 +298,7 @@ export class GLInstancedRenderer {
         this.instanceData[instanceCount++] = boxHeight;
         this.instanceData[instanceCount++] = entityWidth;
         this.instanceData[instanceCount++] = entityHeight;
-        this.instanceData[instanceCount++] = 1;
+        this.instanceData[instanceCount++] = 1.0;
       }
     } else {
       // Left face (faceId = 1)
@@ -307,7 +307,7 @@ export class GLInstancedRenderer {
       this.instanceData[instanceCount++] = boxHeight;
       this.instanceData[instanceCount++] = entityWidth;
       this.instanceData[instanceCount++] = entityHeight;
-      this.instanceData[instanceCount++] = 1;
+      this.instanceData[instanceCount++] = 1.0;
       
       // Also show right face when facing up for better 3D effect
       if (facing === 0) {
@@ -316,7 +316,7 @@ export class GLInstancedRenderer {
         this.instanceData[instanceCount++] = boxHeight;
         this.instanceData[instanceCount++] = entityWidth;
         this.instanceData[instanceCount++] = entityHeight;
-        this.instanceData[instanceCount++] = 2;
+        this.instanceData[instanceCount++] = 2.0;
       }
     }
 
@@ -380,13 +380,13 @@ export class GLInstancedRenderer {
 
     // Only update floor data if provided (camera moved)
     if (floorData !== null) {
-      // Pack floor data: x, y, height(0 for floor), width, depth, faceId(0 for top)
+      // Floor data: x, y, height(0 for floor), width, depth, faceId(0 for top)
       this.instanceData[0] = floorData.x;
       this.instanceData[1] = floorData.y;
-      this.instanceData[2] = 0;        // height = 0 for floor
+      this.instanceData[2] = 0.0;     // height = 0 for floor
       this.instanceData[3] = floorData.width;
       this.instanceData[4] = floorData.height;
-      this.instanceData[5] = 0;        // faceId = 0 (top face)
+      this.instanceData[5] = 0.0;     // faceId = 0 (top face)
 
       gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 6));
