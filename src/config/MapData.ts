@@ -1,6 +1,6 @@
-export const TILE_SIZE = 64;
-export const MAP_COLS = 32;
-export const MAP_ROWS = 32;
+export const TILE_SIZE = 32;
+export const MAP_COLS = 64;
+export const MAP_ROWS = 64;
 export const WORLD_WIDTH = MAP_COLS * TILE_SIZE;
 export const WORLD_HEIGHT = MAP_ROWS * TILE_SIZE;
 

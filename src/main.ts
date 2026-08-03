@@ -1,7 +1,7 @@
-// 1. Ensure CELL_SIZE is exported from './config/Constants'
+// 1. Import map data and renderer
 import { generateTestMap, MAP_DATA } from './config/MapData';
 import { MapRenderer } from './render/MapRenderer';
-import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, CELL_SIZE, PLAYER_ID } from './config/Constants';
+import { MAX_ENTITIES, FIXED_DT, WORLD_WIDTH, WORLD_HEIGHT, PLAYER_ID } from './config/Constants';
 import { World } from './ecs/World';
 // 2. Fixed export/import style for MovementSystem (switched to default or named depending on your file structure)
 import { MovementSystem } from './systems/MovementSystem'; 
@@ -44,8 +44,8 @@ canvas.height = window.innerHeight;
   console.log('[Engine] Map generated, size:', MAP_DATA.length, 'tiles');
   
   // Spawn player entity at center of map (avoiding border walls)
-  const playerX = WORLD_WIDTH / 2;
-  const playerY = WORLD_HEIGHT / 2;
+  const playerX = WORLD_WIDTH / 2 - 16;
+  const playerY = WORLD_HEIGHT / 2 - 16;
   world.active[PLAYER_ID] = 1;
   world.x[PLAYER_ID] = playerX;
   world.y[PLAYER_ID] = playerY;
