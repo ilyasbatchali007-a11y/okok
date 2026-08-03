@@ -70,7 +70,7 @@ const FS_SOURCE = `#version 300 es
 precision mediump float;
 
 in vec2 v_uv;
-in int v_faceId;
+flat in int v_faceId;
 uniform sampler2D u_texture;
 uniform int u_renderMode;  // 0 = floor, 1 = entity
 uniform vec4 u_entityColor;
