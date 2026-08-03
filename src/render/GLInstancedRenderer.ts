@@ -27,21 +27,22 @@ void main() {
   vec2 uv;
   
   if (a_faceId == 0.0) {
-    // TOP FACE: lies at y=height, spans width x depth
-    worldPos = vec3(posX + a_quadPos.x * width, posY + height, posY + a_quadPos.y * depth);
+    // TOP FACE: lies at y=height, spans width (x) x depth (y in world)
+    worldPos = vec3(posX + a_quadPos.x * width, height, posY + a_quadPos.y * depth);
     uv = a_quadPos;
   } else if (a_faceId == 1.0) {
-    // LEFT FACE: vertical face on the left side (spans X and Y)
-    worldPos = vec3(posX + a_quadPos.x * width, posY + a_quadPos.y * height, posY + depth);
+    // LEFT FACE: vertical face on the left side (spans X and height/Y)
+    worldPos = vec3(posX + a_quadPos.x * width, a_quadPos.y * height, posY + depth);
     uv = a_quadPos;
   } else {
-    // RIGHT FACE: vertical face on the right side (spans Z and Y)
-    worldPos = vec3(posX + width, posY + a_quadPos.y * height, posY + a_quadPos.x * depth);
+    // RIGHT FACE: vertical face on the right side (spans depth/Y-world and height)
+    worldPos = vec3(posX + width, a_quadPos.y * height, posY + a_quadPos.x * depth);
     uv = a_quadPos;
   }
   
-  // Apply camera offset to get screen-relative position (worldPos.xz is already in world space)
-  vec2 screenPos = worldPos.xz;
+  // Apply camera offset to get screen-relative position
+  // screenPos.x = world X, screenPos.y = world Y (from worldPos.z which stores the Y coordinate)
+  vec2 screenPos = vec2(worldPos.x, worldPos.z);
   
   // Convert to WebGL clip space [-1, 1]
   // First: subtract camera offset to get camera-relative position
@@ -57,8 +58,8 @@ void main() {
   isoPos.x = centeredPos.x * c - centeredPos.y * s;
   isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
   
-  // Add height offset to Y position for 3D effect (push down based on worldPos.y which is the vertical/Y height)
-  isoPos.y -= worldPos.y * 0.8;
+  // Add height offset to Y position for 3D effect (push down based on box height)
+  isoPos.y -= height * 0.8;
   
   // Normalize to [-1, 1] clip space
   vec2 zeroToOne = isoPos / (u_resolution * 0.5);
