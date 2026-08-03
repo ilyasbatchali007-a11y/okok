@@ -177,6 +177,7 @@ export class GLInstancedRenderer {
     gl.bufferData(gl.ARRAY_BUFFER, this.instanceData.byteLength, gl.DYNAMIC_DRAW);
 
     // Attribute 1: Position (px, py, height) - location 1
+    // Stride is 6 floats * 4 bytes = 24 bytes
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 0);
     gl.vertexAttribDivisor(1, 1);
@@ -187,8 +188,10 @@ export class GLInstancedRenderer {
     gl.vertexAttribDivisor(2, 1);
 
     // Attribute 3: Face ID (int) - location 3
+    // Face ID is stored as float in the buffer but cast to int in shader
+    // Offset: 5 floats * 4 bytes = 20 bytes
     gl.enableVertexAttribArray(3);
-    gl.vertexAttribIPointer(3, 1, gl.INT, 24, 20);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 24, 20);
     gl.vertexAttribDivisor(3, 1);
 
     gl.bindVertexArray(null);
