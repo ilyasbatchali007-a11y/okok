@@ -6,7 +6,7 @@ const VS_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_quadPos;   // Unit quad vertex position [0..1]
 layout(location = 1) in vec3 a_pos;       // Entity position (px, py, height)
 layout(location = 2) in vec2 a_size;      // Entity size (width, depth)
-layout(location = 3) in int a_faceId;     // Face identifier: 0=top, 1=left, 2=right
+layout(location = 3) in float a_faceId;   // Face identifier: 0=top, 1=left, 2=right
 
 uniform vec2 u_resolution;
 uniform float u_isoAngle;                 // Isometric rotation angle
@@ -14,7 +14,7 @@ uniform float u_isoScale;                 // Y scale for isometric projection (t
 uniform vec2 u_cameraOffset;              // Camera offset for scrolling
 
 out vec2 v_uv;
-flat out int v_faceId;
+out float v_faceId;
 
 void main() {
   float width = a_size.x;
@@ -70,7 +70,7 @@ const FS_SOURCE = `#version 300 es
 precision mediump float;
 
 in vec2 v_uv;
-flat in int v_faceId;
+in float v_faceId;
 uniform sampler2D u_texture;
 uniform int u_renderMode;  // 0 = floor, 1 = entity
 uniform vec4 u_entityColor;
@@ -82,10 +82,12 @@ void main() {
     vec3 baseColor = u_entityColor.rgb;
     float shade;
     
-    if (v_faceId == 0) {
+    int faceId = int(v_faceId + 0.5);  // Round to nearest integer
+    
+    if (faceId == 0) {
       // TOP FACE: brightest
       shade = 1.0;
-    } else if (v_faceId == 1) {
+    } else if (faceId == 1) {
       // LEFT FACE: medium shade
       shade = 0.7;
     } else {
@@ -188,10 +190,10 @@ export class GLInstancedRenderer {
     gl.vertexAttribDivisor(2, 1);
 
     // Attribute 3: Face ID (int) - location 3
-    // Face ID is stored as float in the buffer but cast to int in shader
+    // Face ID is stored as float in the buffer, read as float and converted to int in shader
     // Offset: 5 floats * 4 bytes = 20 bytes
     gl.enableVertexAttribArray(3);
-    gl.vertexAttribIPointer(3, 1, gl.INT, 24, 20);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 24, 20);
     gl.vertexAttribDivisor(3, 1);
 
     gl.bindVertexArray(null);
