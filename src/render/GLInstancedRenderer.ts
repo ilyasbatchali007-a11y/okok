@@ -24,11 +24,11 @@ void main() {
   vec3 worldPos;
   vec2 uv;
   
-  if (a_faceId == 0) {
+  if (a_faceId == 0.0) {
     // TOP FACE: lies at y=height, spans width x depth
     worldPos = vec3(a_pos.x + a_quadPos.x * width, a_pos.y + a_pos.z, a_pos.y + a_quadPos.y * depth);
     uv = a_quadPos;
-  } else if (a_faceId == 1) {
+  } else if (a_faceId == 1.0) {
     // LEFT FACE: vertical face on the left side
     worldPos = vec3(a_pos.x + a_quadPos.x * width, a_pos.y + a_pos.z * (1.0 - a_quadPos.y), a_pos.y + depth);
     uv = a_quadPos;
