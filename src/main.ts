@@ -49,8 +49,8 @@ canvas.height = window.innerHeight;
   world.active[PLAYER_ID] = 1;
   world.x[PLAYER_ID] = playerX;
   world.y[PLAYER_ID] = playerY;
-  world.w[PLAYER_ID] = 32;
-  world.h[PLAYER_ID] = 32;
+  world.w[PLAYER_ID] = 32;  // width
+  world.h[PLAYER_ID] = 32;  // depth
   world.speed[PLAYER_ID] = 200;
   world.vx[PLAYER_ID] = 0;
   world.vy[PLAYER_ID] = 0;
@@ -153,7 +153,7 @@ canvas.height = window.innerHeight;
       );
     }
 
-    // 3. Draw Player Entity (red square) on Top
+    // 3. Draw Player Entity (red 3D box) on Top
     renderer.renderPlayer(world, canvas.width, canvas.height, texture, camX, camY);
 
     requestAnimationFrame(loop);

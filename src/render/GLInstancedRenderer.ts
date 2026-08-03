@@ -256,7 +256,7 @@ export class GLInstancedRenderer {
   }
   
   /**
-   * Render player entity with red color as a 3D box with dynamic facing
+   * Render player entity as a red 3D box
    */
   public renderPlayer(world: World, width: number, height: number, texture: WebGLTexture,
                       cameraX: number = 0, cameraY: number = 0): void {
@@ -269,19 +269,13 @@ export class GLInstancedRenderer {
     const py = worldAny.y[PLAYER_ID];
     const entityWidth = worldAny.w[PLAYER_ID];
     const entityHeight = worldAny.h[PLAYER_ID];
-    const boxHeight = worldAny.jumpVel ? Math.max(0, 24 + worldAny.jumpVel[PLAYER_ID] * 0.05) : 24; // Visual jump effect
-    const facing = worldAny.facing ? worldAny.facing[PLAYER_ID] : 1; // Default facing right
-    
-    console.log('[RenderPlayer] pos:', px, py, 'size:', entityWidth, entityHeight, 'height:', boxHeight, 'facing:', facing);
-    
-    // Determine which faces to show based on facing direction
-    // 0=up, 1=right, 2=down, 3=left
-    // We'll always show top, but adjust left/right visibility based on facing
+    const boxHeight = 32;  // Fixed height for the 3D box
     
     // Instance layout: [px, py, height, width, depth, faceId]
+    // Render all 3 faces of the box (top, left, right)
     let instanceCount = 0;
     
-    // Always render top face (faceId = 0)
+    // Top face (faceId = 0)
     this.instanceData[instanceCount++] = px;
     this.instanceData[instanceCount++] = py;
     this.instanceData[instanceCount++] = boxHeight;
@@ -289,46 +283,21 @@ export class GLInstancedRenderer {
     this.instanceData[instanceCount++] = entityHeight;
     this.instanceData[instanceCount++] = 0.0;
     
-    // Render side faces based on facing direction
-    // When facing right (1) or down (2), show right face
-    // When facing left (3) or up (0), show left face
-    if (facing === 1 || facing === 2) {
-      // Right face (faceId = 2)
-      this.instanceData[instanceCount++] = px;
-      this.instanceData[instanceCount++] = py;
-      this.instanceData[instanceCount++] = boxHeight;
-      this.instanceData[instanceCount++] = entityWidth;
-      this.instanceData[instanceCount++] = entityHeight;
-      this.instanceData[instanceCount++] = 2.0;
-      
-      // Also show left face when facing down for better 3D effect
-      if (facing === 2) {
-        this.instanceData[instanceCount++] = px;
-        this.instanceData[instanceCount++] = py;
-        this.instanceData[instanceCount++] = boxHeight;
-        this.instanceData[instanceCount++] = entityWidth;
-        this.instanceData[instanceCount++] = entityHeight;
-        this.instanceData[instanceCount++] = 1.0;
-      }
-    } else {
-      // Left face (faceId = 1)
-      this.instanceData[instanceCount++] = px;
-      this.instanceData[instanceCount++] = py;
-      this.instanceData[instanceCount++] = boxHeight;
-      this.instanceData[instanceCount++] = entityWidth;
-      this.instanceData[instanceCount++] = entityHeight;
-      this.instanceData[instanceCount++] = 1.0;
-      
-      // Also show right face when facing up for better 3D effect
-      if (facing === 0) {
-        this.instanceData[instanceCount++] = px;
-        this.instanceData[instanceCount++] = py;
-        this.instanceData[instanceCount++] = boxHeight;
-        this.instanceData[instanceCount++] = entityWidth;
-        this.instanceData[instanceCount++] = entityHeight;
-        this.instanceData[instanceCount++] = 2.0;
-      }
-    }
+    // Left face (faceId = 1)
+    this.instanceData[instanceCount++] = px;
+    this.instanceData[instanceCount++] = py;
+    this.instanceData[instanceCount++] = boxHeight;
+    this.instanceData[instanceCount++] = entityWidth;
+    this.instanceData[instanceCount++] = entityHeight;
+    this.instanceData[instanceCount++] = 1.0;
+    
+    // Right face (faceId = 2)
+    this.instanceData[instanceCount++] = px;
+    this.instanceData[instanceCount++] = py;
+    this.instanceData[instanceCount++] = boxHeight;
+    this.instanceData[instanceCount++] = entityWidth;
+    this.instanceData[instanceCount++] = entityHeight;
+    this.instanceData[instanceCount++] = 2.0;
 
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
