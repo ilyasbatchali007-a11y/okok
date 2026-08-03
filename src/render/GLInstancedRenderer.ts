@@ -284,9 +284,9 @@ export class GLInstancedRenderer {
     // Always render top face (faceId = 0)
     this.instanceData[instanceCount++] = px;
     this.instanceData[instanceCount++] = py;
-    this.instanceData[instanceCount++] = boxHeight;
-    this.instanceData[instanceCount++] = entityWidth;
-    this.instanceData[instanceCount++] = entityHeight;
+    this.instanceData[instanceCount++] = boxHeight;  // height (vertical dimension)
+    this.instanceData[instanceCount++] = entityWidth; // width (x-dimension)
+    this.instanceData[instanceCount++] = 32;          // depth (z-dimension, fixed for box shape)
     this.instanceData[instanceCount++] = 0.0;
     
     // Render side faces based on facing direction
@@ -298,7 +298,7 @@ export class GLInstancedRenderer {
       this.instanceData[instanceCount++] = py;
       this.instanceData[instanceCount++] = boxHeight;
       this.instanceData[instanceCount++] = entityWidth;
-      this.instanceData[instanceCount++] = entityHeight;
+      this.instanceData[instanceCount++] = 32;
       this.instanceData[instanceCount++] = 2.0;
       
       // Also show left face when facing down for better 3D effect
@@ -307,7 +307,7 @@ export class GLInstancedRenderer {
         this.instanceData[instanceCount++] = py;
         this.instanceData[instanceCount++] = boxHeight;
         this.instanceData[instanceCount++] = entityWidth;
-        this.instanceData[instanceCount++] = entityHeight;
+        this.instanceData[instanceCount++] = 32;
         this.instanceData[instanceCount++] = 1.0;
       }
     } else {
@@ -316,7 +316,7 @@ export class GLInstancedRenderer {
       this.instanceData[instanceCount++] = py;
       this.instanceData[instanceCount++] = boxHeight;
       this.instanceData[instanceCount++] = entityWidth;
-      this.instanceData[instanceCount++] = entityHeight;
+      this.instanceData[instanceCount++] = 32;
       this.instanceData[instanceCount++] = 1.0;
       
       // Also show right face when facing up for better 3D effect
@@ -325,7 +325,7 @@ export class GLInstancedRenderer {
         this.instanceData[instanceCount++] = py;
         this.instanceData[instanceCount++] = boxHeight;
         this.instanceData[instanceCount++] = entityWidth;
-        this.instanceData[instanceCount++] = entityHeight;
+        this.instanceData[instanceCount++] = 32;
         this.instanceData[instanceCount++] = 2.0;
       }
     }

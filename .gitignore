@@ -1,5 +1,1 @@
-```
-# Build artifacts
-dist/
-build/
-```
+Nothing should be ignored based on the provided file changes. The only modified file is a TypeScript source file (`src/render/GLInstancedRenderer.ts`), which is a legitimate source code file that should not be ignored. There are no build artifacts, dependency directories, temporary files, or other items that warrant being added to the .gitignore file.
