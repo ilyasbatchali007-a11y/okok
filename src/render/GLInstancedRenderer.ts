@@ -57,8 +57,8 @@ void main() {
   // Center on screen by adding half resolution
   vec2 centeredPos = cameraRelPos + (u_resolution * 0.5);
   
-  // Add height offset to Y position for 3D effect
-  centeredPos.y -= worldPos.y * 0.8;
+  // Add height offset to Y position for 3D effect (subtract because Y is inverted in screen space)
+  centeredPos.y -= worldPos.y;
   
   // Normalize to [-1, 1] clip space
   vec2 zeroToOne = centeredPos / (u_resolution * 0.5);
