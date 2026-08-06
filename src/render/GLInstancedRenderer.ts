@@ -89,7 +89,7 @@ void main() {
     
     fragColor = u_entityColor * brightness;
   } else {
-    // Render as green checkered floor pattern
+    // Render as green checkered floor pattern (procedural, no texture needed)
     float gridX = mod(floor(v_uv.x * 8.0), 2.0);
     float gridY = mod(floor(v_uv.y * 8.0), 2.0);
     float checker = mod(gridX + gridY, 2.0);
@@ -322,9 +322,12 @@ export class GLInstancedRenderer {
     
     // Pack single player entity: px, py, width, height, cubeHeight
     // Cube height is set to 32 (same as footprint) for a true cube appearance
+    // Add Z offset to lift the cube off the ground when jumping
     const cubeHeight = 32.0;
+    const zOffset = worldAny.z ? worldAny.z[PLAYER_ID] : 0;
+    
     this.instanceData[0] = worldAny.px[PLAYER_ID];
-    this.instanceData[1] = worldAny.py[PLAYER_ID];
+    this.instanceData[1] = worldAny.py[PLAYER_ID] - zOffset; // Apply Z as Y offset in isometric view
     this.instanceData[2] = worldAny.width[PLAYER_ID];
     this.instanceData[3] = worldAny.height[PLAYER_ID];
     this.instanceData[4] = cubeHeight;
@@ -416,8 +419,9 @@ export class GLInstancedRenderer {
     gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
     gl.uniform1i(this.renderModeLoc, 0);  // Floor mode
 
+    // Don't bind texture for procedural floor - use null texture
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.bindTexture(gl.TEXTURE_2D, null);
 
     gl.bindVertexArray(this.floorVAO);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1); // Draw 1 instance (the floor)

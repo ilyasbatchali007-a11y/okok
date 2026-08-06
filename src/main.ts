@@ -22,6 +22,10 @@ if (!canvas) throw new Error('Canvas not found');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+// Focus canvas to capture keyboard events
+canvas.focus();
+canvas.tabIndex = 1;
+
   // Create a guaranteed non-null reference for TypeScript closures
   const gl = canvas.getContext('webgl2');
   if (!gl) throw new Error('WebGL 2 is not supported.');
@@ -49,11 +53,13 @@ canvas.height = window.innerHeight;
   world.active[PLAYER_ID] = 1;
   world.x[PLAYER_ID] = playerX;
   world.y[PLAYER_ID] = playerY;
+  world.z[PLAYER_ID] = 0; // Start on ground level
   world.w[PLAYER_ID] = 32;
   world.h[PLAYER_ID] = 32;
   world.speed[PLAYER_ID] = 200;
   world.vx[PLAYER_ID] = 0;
   world.vy[PLAYER_ID] = 0;
+  world.vz[PLAYER_ID] = 0; // No initial vertical velocity
   
   // Update sparse set for renderer
   world.set.count = 1;
@@ -85,13 +91,15 @@ canvas.height = window.innerHeight;
   // 4. Main Game Loop with Fixed Delta Time
   const inputState: Record<string, boolean> = {};
   
-  // Handle keyboard input for movement
+  // Handle keyboard input for movement (case-insensitive for WSAD and arrows)
   window.addEventListener('keydown', (e) => {
-    inputState[e.key] = true;
+    const key = e.key.toLowerCase();
+    inputState[key] = true;
   });
   
   window.addEventListener('keyup', (e) => {
-    inputState[e.key] = false;
+    const key = e.key.toLowerCase();
+    inputState[key] = false;
   });
   
   let accumulator = 0;
