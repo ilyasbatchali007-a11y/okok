@@ -89,7 +89,7 @@ void main() {
     
     fragColor = u_entityColor * brightness;
   } else {
-    // Render as green checkered floor pattern
+    // Render as green checkered floor pattern (procedural, no texture needed)
     float gridX = mod(floor(v_uv.x * 8.0), 2.0);
     float gridY = mod(floor(v_uv.y * 8.0), 2.0);
     float checker = mod(gridX + gridY, 2.0);
@@ -419,8 +419,9 @@ export class GLInstancedRenderer {
     gl.uniform2f(this.cameraOffsetLoc, cameraX, cameraY);
     gl.uniform1i(this.renderModeLoc, 0);  // Floor mode
 
+    // Don't bind texture for procedural floor - use null texture
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.bindTexture(gl.TEXTURE_2D, null);
 
     gl.bindVertexArray(this.floorVAO);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1); // Draw 1 instance (the floor)
