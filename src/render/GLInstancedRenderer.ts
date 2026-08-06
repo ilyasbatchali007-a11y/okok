@@ -1,22 +1,25 @@
 import { World } from '../ecs/World';
 import { PLAYER_ID } from '../config/Constants';
 
-// Vertex Shader Source - simplified isometric transformation
+// Vertex Shader Source - isometric transformation with cube extrusion
 const VS_SOURCE = `#version 300 es
-layout(location = 0) in vec2 a_quadPos; // Unit quad vertex position [0..1]
-layout(location = 1) in vec2 a_pos;     // Entity position (px, py)
-layout(location = 2) in vec2 a_size;    // Entity size (width, height)
+layout(location = 0) in vec3 a_cubePos;   // Cube vertex position (x, y, z) in local space [0..1]
+layout(location = 1) in vec2 a_pos;       // Entity position (px, py)
+layout(location = 2) in vec2 a_size;      // Entity size (width, height)
+layout(location = 3) in float a_height;   // Cube height (z-scale)
+layout(location = 4) in float a_faceId;   // Face identifier for shading
 
 uniform vec2 u_resolution;
-uniform float u_isoAngle;               // Isometric rotation angle
-uniform float u_isoScale;               // Y scale for isometric projection (typically 0.5)
-uniform vec2 u_cameraOffset;            // Camera offset for scrolling
+uniform float u_isoAngle;                 // Isometric rotation angle
+uniform float u_isoScale;                 // Y scale for isometric projection (typically 0.5)
+uniform vec2 u_cameraOffset;              // Camera offset for scrolling
 
+out float v_faceId;
 out vec2 v_uv;
 
 void main() {
-  // Calculate world position from instance data
-  vec2 worldPos = a_pos + (a_quadPos * a_size);
+  // Step A: Calculate base footprint position (unchanged isometric transform)
+  vec2 worldPos = a_pos + (a_cubePos.xy * a_size);
   
   // Apply camera offset to get screen-relative position
   vec2 screenPos = worldPos - u_cameraOffset;
@@ -31,20 +34,27 @@ void main() {
   isoPos.x = centeredPos.x * c - centeredPos.y * s;
   isoPos.y = (centeredPos.x * s + centeredPos.y * c) * u_isoScale;
   
+  // Step B: Screen-space height extrusion
+  // Positive Y in clip space is upward, so we ADD the height offset
+  float screenHeightOffset = a_cubePos.z * a_height * u_isoScale;
+  isoPos.y += screenHeightOffset;
+  
   // Convert to WebGL clip space [-1, 1]
   vec2 zeroToOne = isoPos / (u_resolution * 0.5);
   vec2 zeroToTwo = zeroToOne * 2.0;
   vec2 clipSpace = zeroToTwo - 1.0;
   
   gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);
-  v_uv = a_quadPos;
+  v_faceId = a_faceId;
+  v_uv = a_cubePos.xy;
 }
 `;
 
-// Fragment Shader Source - supports both floor and entity colors
+// Fragment Shader Source - supports both floor and entity colors with per-face shading
 const FS_SOURCE = `#version 300 es
 precision mediump float;
 
+in float v_faceId;
 in vec2 v_uv;
 uniform sampler2D u_texture;
 uniform int u_renderMode;  // 0 = floor, 1 = entity
@@ -53,8 +63,32 @@ out vec4 fragColor;
 
 void main() {
   if (u_renderMode == 1) {
-    // Render as solid red entity
-    fragColor = u_entityColor;
+    // Apply per-face shading for cube entities
+    float brightness = 1.0;
+    
+    // Face ID encoding:
+    // 0 = Top, 1 = Front-Right, 2 = Front-Left, 3 = Back-Right, 4 = Back-Left, 5 = Bottom
+    if (v_faceId < 0.5) {
+      // Top face - full brightness
+      brightness = 1.0;
+    } else if (v_faceId < 1.5) {
+      // Front-Right face - medium shadow
+      brightness = 0.7;
+    } else if (v_faceId < 2.5) {
+      // Front-Left face - dark shadow
+      brightness = 0.5;
+    } else if (v_faceId < 3.5) {
+      // Back-Right face - medium shadow
+      brightness = 0.7;
+    } else if (v_faceId < 4.5) {
+      // Back-Left face - dark shadow  
+      brightness = 0.5;
+    } else {
+      // Bottom face - darkest (usually not visible)
+      brightness = 0.3;
+    }
+    
+    fragColor = u_entityColor * brightness;
   } else {
     // Render as green checkered floor pattern
     float gridX = mod(floor(v_uv.x * 8.0), 2.0);
@@ -74,6 +108,7 @@ export class GLInstancedRenderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject;
+  private cubeBuffer: WebGLBuffer;        // Static cube geometry buffer
   private instanceBuffer: WebGLBuffer;
 
   private instanceData: Float32Array;
@@ -92,8 +127,8 @@ export class GLInstancedRenderer {
 
   constructor(gl: WebGL2RenderingContext, maxEntities: number) {
     this.gl = gl;
-    // 4 floats per instance: px, py, width, height
-    this.instanceData = new Float32Array(maxEntities * 4);
+    // 5 floats per instance: px, py, width, height, cubeHeight
+    this.instanceData = new Float32Array(maxEntities * 5);
 
     const vs = this.createShader(gl.VERTEX_SHADER, VS_SOURCE);
     const fs = this.createShader(gl.FRAGMENT_SHADER, FS_SOURCE);
@@ -112,23 +147,44 @@ export class GLInstancedRenderer {
     this.vao = vao;
     gl.bindVertexArray(this.vao);
 
-    // 1. Static Quad Buffer (unit rectangle)
-    const quadVertices = new Float32Array([
-      0, 0,
-      1, 0,
-      0, 1,
-      0, 1,
-      1, 0,
-      1, 1,
+    // 1. Static Cube Buffer (24 vertices: 4 per face × 6 faces with CCW winding)
+    // Each vertex: x, y, z (local [0..1]), faceId (float)
+    // Face IDs: 0=Top, 1=Front-Right, 2=Front-Left, 3=Back-Right, 4=Back-Left, 5=Bottom
+    const cubeVertices = new Float32Array([
+      // Top face (faceId=0) - CCW when viewed from above
+      0, 0, 1, 0,   1, 0, 1, 0,   0, 1, 1, 0,
+      0, 1, 1, 0,   1, 0, 1, 0,   1, 1, 1, 0,
+      
+      // Front-Right face (faceId=1) - CCW when viewed from front-right
+      1, 0, 0, 1,   1, 1, 0, 1,   1, 0, 1, 1,
+      1, 0, 1, 1,   1, 1, 0, 1,   1, 1, 1, 1,
+      
+      // Front-Left face (faceId=2) - CCW when viewed from front-left
+      0, 0, 0, 2,   0, 0, 1, 2,   0, 1, 0, 2,
+      0, 1, 0, 2,   0, 0, 1, 2,   0, 1, 1, 2,
+      
+      // Back-Right face (faceId=3) - CCW when viewed from back-right
+      1, 1, 0, 3,   1, 1, 1, 3,   0, 1, 0, 3,
+      0, 1, 0, 3,   1, 1, 1, 3,   0, 1, 1, 3,
+      
+      // Back-Left face (faceId=4) - CCW when viewed from back-left
+      0, 1, 0, 4,   0, 1, 1, 4,   0, 0, 0, 4,
+      0, 0, 0, 4,   0, 1, 1, 4,   0, 0, 1, 4,
+      
+      // Bottom face (faceId=5) - CCW when viewed from below
+      0, 0, 0, 5,   0, 1, 0, 5,   1, 0, 0, 5,
+      1, 0, 0, 5,   0, 1, 0, 5,   1, 1, 0, 5,
     ]);
-    const quadBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+    const cubeBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, cubeVertices, gl.STATIC_DRAW);
+    this.cubeBuffer = cubeBuffer;
 
+    // Attribute 0: Cube position (x, y, z) - 4 floats per vertex (xyz + faceId packed)
     gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
 
-    // 2. Dynamic Instance Buffer (pos & size)
+    // 2. Dynamic Instance Buffer (pos, size, height)
     const instBuffer = gl.createBuffer();
     if (!instBuffer) throw new Error('Failed to create instance buffer');
     this.instanceBuffer = instBuffer;
@@ -136,15 +192,27 @@ export class GLInstancedRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.instanceData.byteLength, gl.DYNAMIC_DRAW);
 
+    // Stride: 5 floats × 4 bytes = 20 bytes
+    const stride = 20;
+
     // Attribute 1: Position (px, py)
     gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 0);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, 0);
     gl.vertexAttribDivisor(1, 1);
 
     // Attribute 2: Size (width, height)
     gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 16, 8);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, stride, 8);
     gl.vertexAttribDivisor(2, 1);
+
+    // Attribute 3: Height (cube height/z-scale)
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, stride, 16);
+    gl.vertexAttribDivisor(3, 1);
+
+    // Enable back-face culling for proper cube rendering
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
 
     gl.bindVertexArray(null);
   }
@@ -198,7 +266,7 @@ export class GLInstancedRenderer {
   }
   
   /**
-   * Render player entity with red color
+   * Render player entity as a 3D cube with red color and per-face shading
    */
   public renderPlayer(world: World, width: number, height: number, texture: WebGLTexture,
                       cameraX: number = 0, cameraY: number = 0): void {
@@ -207,11 +275,14 @@ export class GLInstancedRenderer {
     
     if (!worldAny || !worldAny.active || !worldAny.active[PLAYER_ID]) return;
     
-    // Pack single player entity
+    // Pack single player entity: px, py, width, height, cubeHeight
+    // Cube height is set to 32 (same as footprint) for a true cube appearance
+    const cubeHeight = 32.0;
     this.instanceData[0] = worldAny.px[PLAYER_ID];
     this.instanceData[1] = worldAny.py[PLAYER_ID];
     this.instanceData[2] = worldAny.width[PLAYER_ID];
     this.instanceData[3] = worldAny.height[PLAYER_ID];
+    this.instanceData[4] = cubeHeight;
 
     gl.useProgram(this.program);
     gl.uniform2f(this.resolutionLoc, width, height);
@@ -225,10 +296,11 @@ export class GLInstancedRenderer {
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 4));
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.instanceData.subarray(0, 5));
 
     gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, 1);
+    // Draw 24 vertices (4 per face × 6 faces) for the cube
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 24, 1);
     gl.bindVertexArray(null);
   }
 
