@@ -322,9 +322,12 @@ export class GLInstancedRenderer {
     
     // Pack single player entity: px, py, width, height, cubeHeight
     // Cube height is set to 32 (same as footprint) for a true cube appearance
+    // Add Z offset to lift the cube off the ground when jumping
     const cubeHeight = 32.0;
+    const zOffset = worldAny.z ? worldAny.z[PLAYER_ID] : 0;
+    
     this.instanceData[0] = worldAny.px[PLAYER_ID];
-    this.instanceData[1] = worldAny.py[PLAYER_ID];
+    this.instanceData[1] = worldAny.py[PLAYER_ID] - zOffset; // Apply Z as Y offset in isometric view
     this.instanceData[2] = worldAny.width[PLAYER_ID];
     this.instanceData[3] = worldAny.height[PLAYER_ID];
     this.instanceData[4] = cubeHeight;
